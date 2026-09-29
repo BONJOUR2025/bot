@@ -8071,3 +8071,16 @@ button:hover > .vac-desc { color: var(--color-text); }
 .pc-passed { margin: 0; padding-left: 1.1rem; display: flex; flex-direction: column; gap: 3px; font-size: 0.88rem; }
 .pc-order-notes { margin: 0 0 16px; padding: 14px; border-radius: 14px; border: 1px dashed var(--color-border); display: flex; flex-direction: column; gap: 10px; }
 @media (max-width: 700px) { .pc-note-form__main { grid-template-columns: 1fr; } .pc-note { flex-wrap: wrap; } }
+
+/* Деление услуги между мастерами (карточка заказа, старший мастер). */
+.wo-split { display: flex; flex-direction: column; gap: 8px; margin: 0.4rem 0 0.6rem; }
+.wo-split__row { display: grid; grid-template-columns: minmax(0, 1fr) 5.5rem 6rem auto; gap: 8px; align-items: center; }
+.wo-split__pct { display: flex; align-items: center; gap: 4px; }
+.wo-split__pct .input { text-align: right; font-variant-numeric: tabular-nums; }
+.wo-split__sum { font-variant-numeric: tabular-nums; font-size: 0.85rem; color: var(--color-text-muted); text-align: right; }
+.wo-split__foot { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.wo-split__total { margin-left: auto; font-weight: 600; font-variant-numeric: tabular-nums; }
+.wo-split__total.is-ok { color: var(--color-success); }
+.wo-split__total.is-bad { color: var(--color-danger); }
+.wo-split-note { display: flex; align-items: center; gap: 6px; margin: 0.4rem 0 0; font-size: 0.82rem; font-weight: 500; color: var(--color-primary); }
+@media (max-width: 480px) { .wo-split__row { grid-template-columns: minmax(0, 1fr) 4.8rem auto; } .wo-split__sum { display: none; } }

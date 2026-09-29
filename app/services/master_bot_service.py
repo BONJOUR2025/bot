@@ -142,7 +142,32 @@ def _load_services(period: str) -> list[dict[str, Any]]:
         raise StaleCacheError(
             f"masters.works за {df}..{dt} посчитан без master_user_id"
         )
-    return services
+    from app.services.service_split_service import apply as apply_splits
+
+    return apply_splits(services)
+
+
+def _earned(services: Iterable[dict], master: Master) -> list[dict]:
+    """Услуги, за которые мастеру положена зарплата: его выходы и его доли в
+    поделённых услугах. У поделённой — сумма и зарплата по доле мастера
+    (а выход при этом мог поставить и другой: делит старший мастер)."""
+    from app.services.service_split_service import salary_parts
+
+    uid = master.agbis_user_id
+    out = []
+    for svc in services:
+        if svc.get("master_salary") is None:
+            continue
+        for part in salary_parts(svc):
+            try:
+                mine = part.get("user_id") is not None and int(part["user_id"]) == uid
+            except (TypeError, ValueError):
+                mine = False
+            if mine:
+                out.append({**svc, "master_salary": part["salary"], "kredit": part["kredit"],
+                            "share": part.get("share", 1.0), "kredit_full": svc.get("kredit")})
+                break
+    return out
 
 
 def _mine(services: Iterable[dict], master: Master, field: str) -> list[dict]:
@@ -197,8 +222,7 @@ def get_earnings(master: Master, period: str = PERIOD_MONTH) -> dict[str, Any]:
     справочное: на руки идёт стипендия за дни присутствия. Обе цифры
     возвращаются, а что из них к выплате — решает поле `payout_basis`.
     """
-    services = _mine(_load_services(period), master, "out_user_id")
-    paid = [s for s in services if s.get("master_salary") is not None]
+    paid = _earned(_load_services(period), master)
 
     accrued = round(sum(_num(s.get("master_salary")) for s in paid), 2)
     kredit = round(sum(_num(s.get("kredit")) for s in paid), 2)
@@ -237,6 +261,10 @@ def get_earnings(master: Master, period: str = PERIOD_MONTH) -> dict[str, Any]:
                 "out_time": svc.get("out_time"),
                 "day": str(svc.get("out_time"))[:10] if svc.get("out_time") else None,
                 "duration_min": svc.get("duration_min"),
+                # Доля в поделённой услуге (1 — работа целиком своя).
+                "share": svc.get("share", 1.0),
+                "split_with": [p["name"] for p in (svc.get("split") or [])
+                               if str(p.get("user_id")) != str(master.agbis_user_id)],
             }
             for svc in paid
         ),
@@ -293,6 +321,8 @@ def _apprentice_stipend(master: Master, df: date, dt: date) -> tuple[float, int]
 # переключение вкладок было мгновенным, и мало, чтобы только что сданная
 # работа задержалась на экране; кнопка «Обновить» кэш всё равно обходит.
 WIP_CACHE_TTL_SECONDS = 90
+# Статус «Отменённый» — одинаковый у услуги (DOC_ORDER_SERVICES) и заказа.
+CANCELLED_STATUS = 7
 _wip_cache: dict[int, tuple[float, list[dict[str, Any]]]] = {}
 
 
@@ -344,6 +374,11 @@ def _build_wip(master: Master) -> list[dict[str, Any]]:
     open_services = [svc for svc in services if str(svc.get("status")) == "В работе"]
     details = _order_details([svc.get("service_id") for svc in open_services])
     for svc in open_services:
+        extra = details.get(svc.get("service_id")) or {}
+        # Вход есть, выхода нет — но услугу (или весь заказ) в Агбисе отменили:
+        # работы уже не будет, а без проверки она висела бы в «В работе» вечно.
+        if CANCELLED_STATUS in (extra.get("service_status_id"), extra.get("order_status_id")):
+            continue
         days = None
         raw_in = svc.get("in_time")
         if raw_in:
@@ -351,7 +386,6 @@ def _build_wip(master: Master) -> list[dict[str, Any]]:
                 days = (today - date.fromisoformat(str(raw_in)[:10])).days
             except ValueError:
                 days = None
-        extra = details.get(svc.get("service_id")) or {}
         wip.append({
             "service_id": svc.get("service_id"),
             "doc_num": svc.get("doc_num"),
@@ -472,20 +506,20 @@ def _order_details(service_ids: list[Any], with_photos: bool = True) -> dict[Any
             for start in range(0, len(ids), 500):
                 chunk = ids[start:start + 500]
                 cur.execute(
-                    "SELECT dos.id, dos.parent_dos_id, dor.date_out, dos.ext_info, dor.status_id "
+                    "SELECT dos.id, dos.parent_dos_id, dor.date_out, dos.ext_info, dor.status_id, dos.status_id "
                     "FROM doc_order_services dos "
                     "JOIN docs_order dor ON dor.id = dos.doc_order_id "
                     f"WHERE dos.id IN ({','.join('?' * len(chunk))})",
                     chunk,
                 )
-                for sid, parent_id, date_out, ext_info, order_status in cur.fetchall():
+                for sid, parent_id, date_out, ext_info, order_status, service_status in cur.fetchall():
                     due = date_out if isinstance(date_out, datetime) and date_out.year > 2000 else None
                     comments = []
                     note = _text(ext_info)
                     if note:
                         comments.append({"text": note, "about": "услуге", "label": None})
                     out[sid] = {"due": due, "photos": [], "comments": comments,
-                                "order_status_id": order_status}
+                                "order_status_id": order_status, "service_status_id": service_status}
                     item_of[sid] = parent_id or sid
 
             photos_of_item: dict[int, list[dict[str, Any]]] = {}

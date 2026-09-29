@@ -29,6 +29,15 @@ class LeadScan(BaseModel):
     master_uid: int
 
 
+class SplitPart(BaseModel):
+    master_uid: int
+    percent: int
+
+
+class SplitIn(BaseModel):
+    parts: list[SplitPart]
+
+
 class AttendanceMark(BaseModel):
     date: date
     note: str = ""
@@ -198,5 +207,91 @@ def create_workshop_router() -> APIRouter:
             except Exception:
                 logging.getLogger(__name__).warning("Уведомление об отметке не отправлено", exc_info=True)
         return {**result, "master": master["name"]}
+
+    # ── деление услуги между мастерами ───────────────────────────────
+    # Запись только в нашу базу (service_splits.json), Агбис не трогаем:
+    # зарплата по доле накладывается при чтении отчёта мастеров.
+    def _split_service(service_id: int) -> dict:
+        """Услуга из Агбиса: только работа мастера на посту и не отменённая."""
+        from app.services.firebird_service import _connect
+        from app.services.masters_service import SALARY_FOLDER_IDS
+        from app.services.workshop_order_service import _text
+
+        con = _connect()
+        try:
+            cur = con.cursor()
+            cur.execute(
+                "SELECT dos.status_id, t.folder_id, t.name, d.doc_num, dos.kredit FROM doc_order_services dos "
+                "JOIN tovars_tbl t ON t.tovar_id = dos.tovar_id "
+                "JOIN docs_order dor ON dor.id = dos.doc_order_id JOIN docs d ON d.doc_id = dor.doc_id "
+                "WHERE dos.id = ?", (service_id,))
+            row = cur.fetchone()
+        finally:
+            con.close()
+        if not row:
+            raise HTTPException(404, "Услуга не найдена в Агбисе.")
+        status, folder_id, name, doc_num, kredit = row
+        if status == 7:
+            raise HTTPException(400, "Услуга отменена — делить нечего.")
+        if folder_id not in SALARY_FOLDER_IDS:
+            raise HTTPException(400, "Это не работа мастера на посту — зарплата по ней не начисляется.")
+        return {"name": _text(name), "doc_num": _text(doc_num), "kredit": float(kredit or 0)}
+
+    @router.get("/services/{service_id}/split")
+    async def get_split(service_id: int):
+        from app.data.service_split_repository import ServiceSplitRepository
+
+        return ServiceSplitRepository().get(service_id)
+
+    @router.put("/services/{service_id}/split")
+    async def set_split(service_id: int, data: SplitIn, current: ResolvedUser = Depends(get_current_user)):
+        from app.data.service_split_repository import ServiceSplitRepository
+        from app.services import service_split_service as splits
+        from app.services.workshop_service import invalidate
+
+        svc = await _run(_split_service, service_id)
+        masters = await _run(_masters_for_lead)
+        try:
+            parts = await _run(splits.validate_parts, [p.model_dump() for p in data.parts], masters)
+        except ValueError as exc:
+            raise HTTPException(400, str(exc))
+        lead = getattr(current, "display_name", None) or getattr(current, "login", None) or "старший мастер"
+        rec = ServiceSplitRepository().set(service_id, parts, by=str(lead), doc_num=svc["doc_num"],
+                                           service_name=svc["name"])
+        invalidate()
+        who = ", ".join(f"{p['name']} {p['percent']}%" for p in parts)
+        scan_logger.info("Деление услуги %s (заказ %s) — %s: %s", service_id, svc["doc_num"], lead, who)
+        try:
+            from app.services.notify import send_notification
+
+            await send_notification(
+                f"➗ <b>Услуга поделена между мастерами</b>\n{lead}: заказ {svc['doc_num']}, "
+                f"{svc['name']} ({svc['kredit']:.0f} ₽)\n{who}"
+            )
+        except Exception:
+            logging.getLogger(__name__).warning("Уведомление о делении не отправлено", exc_info=True)
+        return rec
+
+    @router.delete("/services/{service_id}/split")
+    async def delete_split(service_id: int, current: ResolvedUser = Depends(get_current_user)):
+        from app.data.service_split_repository import ServiceSplitRepository
+        from app.services.workshop_service import invalidate
+
+        rec = ServiceSplitRepository().get(service_id)
+        if not ServiceSplitRepository().delete(service_id):
+            raise HTTPException(404, "Услуга не поделена.")
+        invalidate()
+        lead = getattr(current, "display_name", None) or getattr(current, "login", None) or "старший мастер"
+        scan_logger.info("Деление услуги %s снято — %s", service_id, lead)
+        try:
+            from app.services.notify import send_notification
+
+            await send_notification(
+                f"➗ <b>Деление услуги снято</b>\n{lead}: заказ {(rec or {}).get('doc_num', '')}, "
+                f"{(rec or {}).get('service_name', '')} — зарплата снова целиком мастеру выхода"
+            )
+        except Exception:
+            logging.getLogger(__name__).warning("Уведомление о снятии деления не отправлено", exc_info=True)
+        return {"ok": True}
 
     return router

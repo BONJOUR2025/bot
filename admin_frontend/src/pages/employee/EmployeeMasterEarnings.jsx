@@ -477,6 +477,9 @@ export default function EmployeeMasterEarnings() {
                             <div className="emp-earn-svc__title">{serviceTitle(s.name)}</div>
                             <div className="emp-earn-svc__meta">
                               заказ {s.doc_num}
+                              {s.share != null && s.share < 1 && (
+                                <> · ваша доля {Math.round(s.share * 100)}%{s.split_with?.length ? ` (вместе с ${s.split_with.join(', ')})` : ''}</>
+                              )}
                             </div>
                           </div>
                           <div className="emp-earn-svc__sum">

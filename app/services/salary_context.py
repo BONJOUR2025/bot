@@ -86,7 +86,9 @@ async def _master_gross(employee_id: str, year: int, month: int) -> tuple[float 
     except Exception as exc:
         return None, f"Не удалось получить данные из Firebird: {exc}"
 
-    summary = result.get("salary_summary") or []
+    from app.services.service_split_service import apply_result as apply_splits
+
+    summary = apply_splits(result).get("salary_summary") or []
     row = masters_service.find_master_salary_row(employee_id, summary)
     if row is None:
         return None, f"Не найдено начислений за {month:02d}.{year} в отчёте по мастерам."

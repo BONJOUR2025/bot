@@ -578,6 +578,8 @@ def build_overview() -> dict[str, Any]:
     for svc in open_rows:
         extra = details.get(svc.get("service_id")) or {}
         order_status = extra.get("order_status_id")
+        if extra.get("service_status_id") == 7:
+            continue  # услугу отменили — ни в работе, ни в «нет выхода» её нет
         if order_status in READY_STATUSES:
             issues.append(_issue("no_out", svc, people, order_status_id=order_status))
             continue
@@ -656,25 +658,31 @@ def build_overview() -> dict[str, Any]:
         r["overdue"] += item.get("due_state") == "overdue"
         r["stale"] += (item.get("days") or 0) >= STALE_WIP_DAYS
     for svc in services:
-        uid = _uid(svc.get("out_user_id"))
         done = _dt(svc.get("out_time"))
-        if uid is None or not done:
+        if not done:
             continue
-        r = row(uid, svc.get("out_description") or "")
-        kredit = _num(svc.get("kredit"))
-        d = done.date()
-        if d == today:
-            r["today"] += 1
-            r["today_sum"] += kredit
-        if d >= week_start:
-            r["week"] += 1
-            r["week_sum"] += kredit
-        if d >= month_start:
-            r["month"] += 1
-            r["month_sum"] += kredit
-            dur = svc.get("duration_min")
-            if dur is not None and _num(dur) >= MEDIAN_MIN_MINUTES:
-                r["durations"].append(_num(dur))
+        # Поделённая услуга — каждому его доля; иначе всё мастеру выхода.
+        split = svc.get("split") or [{"user_id": svc.get("out_user_id"), "name": svc.get("out_description"),
+                                      "kredit": _num(svc.get("kredit"))}]
+        for part in split:
+            uid = _uid(part.get("user_id"))
+            if uid is None:
+                continue
+            r = row(uid, part.get("name") or "")
+            kredit = _num(part.get("kredit"))
+            d = done.date()
+            if d == today:
+                r["today"] += 1
+                r["today_sum"] += kredit
+            if d >= week_start:
+                r["week"] += 1
+                r["week_sum"] += kredit
+            if d >= month_start:
+                r["month"] += 1
+                r["month_sum"] += kredit
+                dur = svc.get("duration_min")
+                if dur is not None and _num(dur) >= MEDIAN_MIN_MINUTES:
+                    r["durations"].append(_num(dur))
     for bucket, key in ((issues, "issues"), (fast, "fast")):
         for issue in bucket:
             uid = issue.get("master_uid")

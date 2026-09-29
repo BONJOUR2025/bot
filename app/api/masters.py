@@ -34,6 +34,7 @@ def create_masters_router() -> APIRouter:
         from app.services.firebird_service import run_with_timeout
         from app.services import fdb_cache
         from app.services.masters_service import FIREBIRD_AVAILABLE, fetch_works_stale
+        from app.services.service_split_service import apply_result as apply_splits
 
         if not FIREBIRD_AVAILABLE:
             raise HTTPException(
@@ -73,7 +74,7 @@ def create_masters_router() -> APIRouter:
                 expired = fetch_works_stale(df, dt)
             if expired is not None:
                 cached, age = expired
-                return {**cached, "stale": True, "stale_age_sec": int(age), **extra}
+                return {**apply_splits(cached), "stale": True, "stale_age_sec": int(age), **extra}
             raise HTTPException(
                 status_code=504,
                 detail="Запрос выполняется слишком долго. Выберите период покороче (например, один месяц) и попробуйте снова.",
@@ -81,6 +82,8 @@ def create_masters_router() -> APIRouter:
         except Exception as exc:
             raise HTTPException(status_code=500, detail=str(exc))
 
+        # Деление услуг между мастерами (старший мастер, «Цех») — поверх кэша.
+        result = apply_splits(result)
         return {**result, **extra} if extra else result
 
     @router.get("/apprentices")

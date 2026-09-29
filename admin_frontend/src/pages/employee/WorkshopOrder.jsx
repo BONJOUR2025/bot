@@ -1,5 +1,5 @@
 import { Fragment, useCallback, useEffect, useRef, useState } from 'react';
-import { ArrowLeft, MessageSquare, ScanLine, Search, X } from 'lucide-react';
+import { ArrowLeft, MessageSquare, Plus, ScanLine, Search, Split, Trash2, X } from 'lucide-react';
 import api from '../../api.js';
 import { PhotoViewer } from '../../components/OrderPhotos.jsx';
 import WebScanner, { canScanInBrowser } from './WebScanner.jsx';
@@ -230,6 +230,103 @@ function LeadScanDialog({ service, action, masters, onClose, onDone }) {
   );
 }
 
+/** Деление одной услуги между мастерами: кто и сколько процентов.
+ *  Пишется в нашу базу, не в Агбис — зарплата по доле считается поверх
+ *  отчёта мастеров. Предзаполняем тем, кто ставил вход и выход. */
+function SplitDialog({ service, masters, onClose, onDone }) {
+  const initial = () => {
+    if (service.split?.parts?.length) {
+      return service.split.parts.map((p) => ({ uid: String(p.user_id), percent: String(p.percent ?? Math.round(p.share * 100)) }));
+    }
+    const known = new Set(masters.map((m) => m.master_uid));
+    const uids = [...new Set(service.scans.filter((x) => x.kind === 'in' || x.kind === 'out')
+      .map((x) => x.master_uid).filter((u) => known.has(u)))];
+    while (uids.length < 2) uids.push('');
+    const even = Math.floor(100 / uids.length);
+    return uids.map((u, i) => ({ uid: u ? String(u) : '', percent: String(i === 0 ? 100 - even * (uids.length - 1) : even) }));
+  };
+  const [rows, setRows] = useState(initial);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  useBackClose(true, onClose);
+
+  const total = rows.reduce((s, r) => s + (parseInt(r.percent, 10) || 0), 0);
+  const set = (i, patch) => setRows((rs) => rs.map((r, j) => (j === i ? { ...r, ...patch } : r)));
+  const evenly = () => setRows((rs) => {
+    const even = Math.floor(100 / rs.length);
+    return rs.map((r, i) => ({ ...r, percent: String(i === 0 ? 100 - even * (rs.length - 1) : even) }));
+  });
+  const salary = (pct) => money(((service.kredit || 0) * (parseInt(pct, 10) || 0)) / 100);
+  const ready = rows.length >= 2 && total === 100 && rows.every((r) => r.uid && (parseInt(r.percent, 10) || 0) > 0)
+    && new Set(rows.map((r) => r.uid)).size === rows.length;
+
+  const save = async () => {
+    setBusy(true); setError('');
+    try {
+      await api.put(`/workshop/services/${service.service_id}/split`,
+        { parts: rows.map((r) => ({ master_uid: Number(r.uid), percent: parseInt(r.percent, 10) })) });
+      onDone(); onClose();
+    } catch (e) { setError(detail(e, 'Не удалось сохранить деление.')); } finally { setBusy(false); }
+  };
+  const remove = async () => {
+    setBusy(true); setError('');
+    try {
+      await api.delete(`/workshop/services/${service.service_id}/split`);
+      onDone(); onClose();
+    } catch (e) { setError(detail(e, 'Не удалось снять деление.')); } finally { setBusy(false); }
+  };
+
+  return (
+    <div className="modal-backdrop" role="dialog" aria-label="Разделить услугу" onClick={(e) => e.target === e.currentTarget && onClose()}>
+      <div className="modal-card wo-dialog">
+        <div className="wo-dialog__head">
+          <h3>Разделить между мастерами</h3>
+          <button type="button" className="icon-button" onClick={onClose} aria-label="Закрыть"><X size={18} /></button>
+        </div>
+        <p className="ws-sub"><b>{serviceTitle(service.name)}</b> · {money(service.kredit)}</p>
+        <p className="ws-hint">Зарплата по услуге разойдётся по долям — в заработке мастеров, в «Мастерах» и в ведомости. В Агбисе ничего не меняется.</p>
+        <div className="wo-split">
+          {rows.map((r, i) => (
+            <div key={i} className="wo-split__row">
+              <select className="input" value={r.uid} onChange={(e) => set(i, { uid: e.target.value })} aria-label={`Мастер ${i + 1}`}>
+                <option value="">— мастер —</option>
+                {masters.map((m) => (
+                  <option key={m.master_uid} value={m.master_uid}
+                    disabled={rows.some((x, j) => j !== i && x.uid === String(m.master_uid))}>{m.name}</option>
+                ))}
+              </select>
+              <div className="wo-split__pct">
+                <input className="input" inputMode="numeric" value={r.percent} aria-label={`Доля мастера ${i + 1}, %`}
+                  onChange={(e) => set(i, { percent: e.target.value.replace(/\D/g, '').slice(0, 3) })} />
+                <span>%</span>
+              </div>
+              <span className="wo-split__sum">{salary(r.percent)}</span>
+              <button type="button" className="icon-button icon-button--ghost" disabled={rows.length <= 2}
+                onClick={() => setRows((rs) => rs.filter((_, j) => j !== i))} aria-label="Убрать мастера"><Trash2 size={15} /></button>
+            </div>
+          ))}
+          <div className="wo-split__foot">
+            {rows.length < 5 && (
+              <button type="button" className="ui-chip" onClick={() => setRows((rs) => [...rs, { uid: '', percent: '0' }])}>
+                <Plus size={14} /> Ещё мастер
+              </button>
+            )}
+            <button type="button" className="ui-chip" onClick={evenly}>Поровну</button>
+            <span className={`wo-split__total ${total === 100 ? 'is-ok' : 'is-bad'}`}>Итого {total}%</span>
+          </div>
+          <p className="ws-hint">Суммы — от стоимости услуги; зарплата с них считается по ставке мастера, как обычно.</p>
+        </div>
+        {error && <p className="emp-page__error">{error}</p>}
+        <div className="wo-dialog__actions">
+          {service.split && <button type="button" className="btn btn-secondary" disabled={busy} onClick={remove}>Снять деление</button>}
+          <button type="button" className="btn btn-secondary" onClick={onClose}>Отмена</button>
+          <button type="button" className="btn btn--primary" disabled={!ready || busy} onClick={save}>{busy ? 'Сохраняю…' : 'Сохранить'}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /** Карточка заказа. `highlightServiceId` — строка заказа, чью бирку
  *  отсканировали: услуга или (почти у половины бирок) изделие целиком.
  *  Она подсвечена и прокручена в поле зрения. Без `onBack` кнопки «Назад» нет. */
@@ -355,6 +452,12 @@ export function OrderView({ orderId, onBack, backLabel = 'Назад к цеху
                         <span>{c.label && <em>{c.label}: </em>}{c.text}</span>
                       </div>
                     ))}
+                    {s.split?.parts?.length > 0 && (
+                      <p className="wo-split-note">
+                        <Split size={14} aria-hidden="true" />
+                        Поделена: {s.split.parts.map((p) => `${p.name} ${p.percent ?? Math.round(p.share * 100)}%`).join(' · ')}
+                      </p>
+                    )}
                     {s.moves.length > 0 && (
                       <p className="ws-sub">Накладные: {s.moves.map((m) => `${day(m.date)} ${m.from} → ${m.to} (${m.status})`).join('; ')}</p>
                     )}
@@ -362,6 +465,9 @@ export function OrderView({ orderId, onBack, backLabel = 'Назад к цеху
                       <div className="wo-lead">
                         <button type="button" className="ui-chip" onClick={() => setDialog({ service: s, action: 'in' })}>Вход за мастера</button>
                         <button type="button" className="ui-chip" onClick={() => setDialog({ service: s, action: 'out' })}>Выход за мастера</button>
+                        <button type="button" className="ui-chip" onClick={() => setDialog({ service: s, action: 'split' })}>
+                          <Split size={14} /> {s.split ? 'Изменить деление' : 'Разделить между мастерами'}
+                        </button>
                       </div>
                     )}
                   </div>
@@ -381,7 +487,10 @@ export function OrderView({ orderId, onBack, backLabel = 'Назад к цеху
           pathFor={isWorkshop ? workshopPhotoPath : pointPhotoPath}
         />
       )}
-      {dialog && (
+      {dialog?.action === 'split' && (
+        <SplitDialog service={dialog.service} masters={masters} onClose={() => setDialog(null)} onDone={load} />
+      )}
+      {dialog && dialog.action !== 'split' && (
         <LeadScanDialog
           service={dialog.service}
           action={dialog.action}

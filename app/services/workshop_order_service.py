@@ -290,8 +290,19 @@ def card(order_id: int) -> dict[str, Any]:
         "defects": _text(defects),
         "kredit": float(kredit or 0),
         **deadline(due, now),
-        "items": [i for i in by_item.values() if i["services"] or i["photos"]],
+        "items": _with_splits([i for i in by_item.values() if i["services"] or i["photos"]]),
     }
+
+
+def _with_splits(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Деление услуги между мастерами (старший мастер) — в строку услуги."""
+    from app.data.service_split_repository import ServiceSplitRepository
+
+    splits = ServiceSplitRepository().all()
+    for item in items:
+        for svc in item["services"]:
+            svc["split"] = splits.get(svc["service_id"])
+    return items
 
 
 def thumbs(item_ids: list[int], per_item: int = 2) -> dict[int, list[dict]]:

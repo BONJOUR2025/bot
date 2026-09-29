@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect } from 'react';
+import { salaryParts } from '../utils/salaryParts.js';
 import {
   Search, RefreshCw, Download, ChevronUp, ChevronDown, ChevronsUpDown, AlertTriangle,
   Hammer, ListChecks, CheckCircle2, Clock, Users, Receipt, ClipboardList,
@@ -100,13 +101,15 @@ function MastersSummaryTable({ rows, onMasterClick, advancesByMaster }) {
   const bySalaryMaster = useMemo(() => {
     const map = {};
     rows.forEach((r) => {
-      if (r.master_salary == null) return;
-      const name = r.out_description || '—';
-      if (!map[name]) map[name] = { master: name, services_done: 0, total_kredit: 0, total_salary: 0, warnings_count: 0 };
-      map[name].services_done++;
-      map[name].total_kredit += Number(r.kredit) || 0;
-      map[name].total_salary += Number(r.master_salary) || 0;
-      if (r.warnings?.length > 0) map[name].warnings_count++;
+      // Поделённая старшим мастером услуга — каждому его доля.
+      salaryParts(r).forEach((p) => {
+        const name = p.master;
+        if (!map[name]) map[name] = { master: name, services_done: 0, total_kredit: 0, total_salary: 0, warnings_count: 0 };
+        map[name].services_done++;
+        map[name].total_kredit += p.kredit;
+        map[name].total_salary += p.salary;
+        if (r.warnings?.length > 0) map[name].warnings_count++;
+      });
     });
     // Avances since the last salary payout aren't derivable from the service
     // rows above at all -- they come from PayoutRepository, keyed by the
@@ -834,10 +837,10 @@ export default function Masters() {
   const topMastersChart = useMemo(() => {
     const map = {};
     filtered.forEach((r) => {
-      if (r.master_salary == null) return;
-      const name = r.out_description || r.description || '—';
-      if (!map[name]) map[name] = { master: name, total_salary: 0 };
-      map[name].total_salary += Number(r.master_salary) || 0;
+      salaryParts(r).forEach((p) => {
+        if (!map[p.master]) map[p.master] = { master: p.master, total_salary: 0 };
+        map[p.master].total_salary += p.salary;
+      });
     });
     return Object.values(map).sort((a, b) => b.total_salary - a.total_salary).slice(0, 8);
   }, [filtered]);

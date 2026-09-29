@@ -1,4 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { salaryParts } from '../utils/salaryParts.js';
 import {
   RefreshCw, Image as ImageIcon, FileSpreadsheet, FileText, Calculator, Hammer, Users, Truck, Wallet, TrendingDown, UserRound,
   SlidersHorizontal, X, Check, Plus, Trash2, Building2, CalendarRange, Percent,
@@ -184,9 +185,7 @@ async function loadMastersRange(from, to, signal) {
   const services = Array.isArray(data) ? data : (data.services || []);
   const map = {};
   for (const r of services) {
-    if (r.master_salary == null) continue;
-    const name = r.out_description || '—';
-    map[name] = (map[name] || 0) + (Number(r.master_salary) || 0);
+    for (const p of salaryParts(r)) map[p.master] = (map[p.master] || 0) + p.salary;
   }
   return Object.entries(map)
     .map(([name, sal]) => ({ name, oklad: 0, commission: sal, bonuses: 0, penalties: 0, advances: 0, gross: sal, to_pay: sal }));
