@@ -223,8 +223,6 @@ def create_point_router() -> APIRouter:
             raise HTTPException(400, "Задайте вопрос подробнее.")
         try:
             answer = await asyncio.to_thread(point_service.kb_ask, q[:1000], dev[1].name)
-        except RuntimeError as exc:
-            raise HTTPException(503, str(exc))
         except Exception as exc:
             import logging
 
