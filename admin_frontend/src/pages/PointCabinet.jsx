@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   AlarmClock, Archive, BookOpen, CalendarDays, ClipboardCheck, ClipboardList, Inbox, KeyRound, MessageCircle,
-  Phone, PhoneOff, RefreshCw, ScanBarcode, Send, Sparkles, Truck, UserSearch, Wallet, X,
+  Phone, PhoneOff, RefreshCw, ScanBarcode, Send, Sparkles, StickyNote, Trash2, Truck, UserSearch, Wallet, X,
 } from 'lucide-react';
 import api, { POINT_TOKEN_KEY } from '../api.js';
 import { OrderSearch, OrderView } from './employee/WorkshopOrder.jsx';
@@ -27,7 +27,7 @@ const SECTIONS = [
       { key: 'ready', label: 'Выдача', icon: Inbox, count: (l) => l.ready.length },
       { key: 'due', label: 'Сроки', icon: AlarmClock, count: (l) => l.due.length },
       { key: 'stale', label: 'Долго лежат', icon: Archive, count: (l) => l.stale.length },
-      { key: 'handover', label: 'Передача смены', icon: ClipboardCheck },
+      { key: 'handover', label: 'Передача смены', icon: ClipboardCheck, count: (l) => l.notesNow || null },
     ],
   },
   {
@@ -52,7 +52,7 @@ const TITLES = {
   ready: ['Смена', 'Готово к выдаче', 'Изделия готовы, клиент ещё не забрал. Сначала те, кому ещё не звонили.'],
   due: ['Смена', 'Сроки', 'Не готово, а срок выдачи сегодня или уже прошёл. Предупредите клиента до того, как он приедет.'],
   stale: ['Смена', 'Долго лежат', 'Готовы больше 14 дней назад и до сих пор не выданы. Напомните клиенту.'],
-  handover: ['Смена', 'Передача смены', 'Кто сдал смену, что проверил и сколько в кассе. Следующий администратор подтверждает приём своим пересчётом.'],
+  handover: ['Смена', 'Передача смены', 'Заметки для смены пишите в течение дня — на любую дату и к заказу. При уходе сдайте смену: пересчёт кассы и чек-лист.'],
   cash: ['Точка', 'Касса', 'Движение по кассе точки в Агбисе за две недели: перемещения в «Основную», приход и остаток на конец дня.'],
   accepted: ['Точка', 'Принято сегодня', 'Заказы, оформленные на точке за сегодня.'],
   logistics: ['Точка', 'Перемещения', 'Накладные между точкой и цехом за две недели: что едет к нам и что уехало.'],
@@ -335,6 +335,193 @@ function Schedule({ tick }) {
   );
 }
 
+/* ── заметки смены ──────────────────────────────────────────────── */
+const NAME_KEY = 'point_my_name';
+function readName() { try { return window.localStorage.getItem(NAME_KEY) || ''; } catch { return ''; } }
+function saveName(n) { try { window.localStorage.setItem(NAME_KEY, n.trim()); } catch { /* не запомним — не страшно */ } }
+function isoDay(offset = 0) {
+  const d = new Date();
+  d.setDate(d.getDate() + offset);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+function dueLabel(iso) {
+  if (iso === isoDay(0)) return 'Сегодня';
+  if (iso === isoDay(1)) return 'Завтра';
+  if (iso === isoDay(2)) return 'Послезавтра';
+  return dayShort(iso);
+}
+const QUICK_DAYS = [[0, 'Сегодня'], [1, 'Завтра'], [2, 'Послезавтра']];
+
+function DuePicker({ value, onChange, idPrefix }) {
+  const quick = QUICK_DAYS.find(([o]) => isoDay(o) === value);
+  return (
+    <div className="pc-due">
+      <div className="pc-seg" role="group" aria-label="На какой день">
+        {QUICK_DAYS.map(([o, label]) => (
+          <button key={o} type="button" className={value === isoDay(o) ? 'is-on' : ''} onClick={() => onChange(isoDay(o))}>{label}</button>
+        ))}
+      </div>
+      <input id={`${idPrefix}-date`} type="date" className={`input pc-date ${quick ? '' : 'is-on'}`} min={isoDay(0)} value={value}
+        onChange={(e) => e.target.value && onChange(e.target.value)} aria-label="Другая дата" />
+    </div>
+  );
+}
+
+/** Быстрая заметка: текст, заказ (номер или бирка), дата. Enter — добавить. */
+function NoteForm({ onAdded, fixedOrderId, people, idPrefix = 'note' }) {
+  const [text, setText] = useState('');
+  const [order, setOrder] = useState('');
+  const [due, setDue] = useState(isoDay(1));
+  const [by, setBy] = useState(readName);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+  const submit = async (e) => {
+    e.preventDefault();
+    if (text.trim().length < 2) return;
+    setBusy(true); setErr('');
+    try {
+      await api.post('/point/notes', { text, due, by, order: fixedOrderId ? '' : order, order_id: fixedOrderId || null });
+      if (by.trim()) saveName(by);
+      setText(''); setOrder('');
+      onAdded();
+    } catch (e2) { setErr(errText(e2, 'Не удалось добавить.')); } finally { setBusy(false); }
+  };
+  return (
+    <form className="pc-note-form" onSubmit={submit}>
+      <div className="pc-note-form__main">
+        <input className="input" value={text} onChange={(e) => setText(e.target.value)} maxLength={500}
+          placeholder={fixedOrderId ? 'Что по этому заказу передать смене' : 'Что передать: перезвонить, клиент придёт в 12, кончились пакеты…'}
+          aria-label="Текст заметки" />
+        {!fixedOrderId && (
+          <input className="input pc-note-form__order" value={order} onChange={(e) => setOrder(e.target.value)} maxLength={40}
+            placeholder="Заказ или бирка" aria-label="Заказ (необязательно)" />
+        )}
+      </div>
+      <div className="pc-note-form__row">
+        <DuePicker value={due} onChange={setDue} idPrefix={idPrefix} />
+        <div className="pc-note-form__by">
+          <NameInput id={`${idPrefix}-by`} value={by} onChange={setBy} people={people} placeholder="Кто пишет" />
+        </div>
+        <button type="submit" className="btn btn--primary" disabled={busy || text.trim().length < 2}>{busy ? '…' : 'Добавить'}</button>
+      </div>
+      {err && <p className="pc-error">{err}</p>}
+    </form>
+  );
+}
+
+function NoteRow({ n, onChanged, onOpenOrder, showDue }) {
+  const [busy, setBusy] = useState(false);
+  const [moving, setMoving] = useState(false);
+  const patch = async (body) => {
+    setBusy(true);
+    try { await api.patch(`/point/notes/${n.id}`, { by: readName(), ...body }); onChanged(); } catch { /* останется как было */ } finally { setBusy(false); setMoving(false); }
+  };
+  const remove = async () => {
+    setBusy(true);
+    try { await api.delete(`/point/notes/${n.id}`); onChanged(); } catch { setBusy(false); }
+  };
+  const done = !!n.done;
+  return (
+    <li className={`pc-note ${done ? 'is-done' : ''}`}>
+      <input type="checkbox" checked={done} disabled={busy} onChange={() => patch({ done: !done })}
+        aria-label={done ? 'Вернуть в работу' : 'Сделано'} />
+      <div className="pc-note__body">
+        <div className="pc-note__text">{n.text}</div>
+        <div className="pc-note__meta">
+          {n.order && (
+            <button type="button" className="pc-note__order" onClick={() => onOpenOrder(n.order.order_id)}>
+              {n.order.doc_num}{n.order.client ? ` · ${n.order.client}` : ''}
+            </button>
+          )}
+          {showDue && <span className="badge badge--neutral">{dueLabel(n.due)}</span>}
+          <span>{n.by || 'без подписи'} · {dayTime(n.created_at)}</span>
+          {done && <span>сделано{n.done.by ? ` · ${n.done.by}` : ''} · {dayTime(n.done.at)}</span>}
+        </div>
+      </div>
+      {!done && (
+        <div className="pc-note__actions">
+          {moving ? (
+            <input type="date" className="input pc-date" min={isoDay(0)} defaultValue={n.due} autoFocus aria-label="Новая дата"
+              onChange={(e) => e.target.value && patch({ due: e.target.value })} onBlur={() => setMoving(false)} />
+          ) : (
+            <>
+              {n.due <= isoDay(0) && <button type="button" className="pc-call" disabled={busy} onClick={() => patch({ due: isoDay(1) })}>на завтра</button>}
+              <button type="button" className="pc-call" disabled={busy} onClick={() => setMoving(true)}>перенести</button>
+            </>
+          )}
+          <button type="button" className="icon-button icon-button--ghost" disabled={busy} onClick={remove} aria-label="Удалить заметку"><Trash2 size={15} /></button>
+        </div>
+      )}
+    </li>
+  );
+}
+
+function groupNotes(notes) {
+  const today = isoDay(0);
+  const open = notes.filter((n) => !n.done).sort((a, b) => (a.due + a.created_at).localeCompare(b.due + b.created_at));
+  const groups = [];
+  const overdue = open.filter((n) => n.due < today);
+  if (overdue.length) groups.push({ key: 'overdue', title: 'Не сделано вовремя', tone: 'error', items: overdue, showDue: true });
+  const dates = [...new Set(open.filter((n) => n.due >= today).map((n) => n.due))];
+  if (!dates.includes(today)) dates.unshift(today);
+  dates.forEach((d) => groups.push({ key: d, title: dueLabel(d), sub: d === today || d === isoDay(1) || d === isoDay(2) ? dayShort(d) : '', items: open.filter((n) => n.due === d) }));
+  const doneRecent = notes.filter((n) => n.done && n.done.at >= new Date(Date.now() - 7 * 864e5).toISOString())
+    .sort((a, b) => b.done.at.localeCompare(a.done.at));
+  return { groups, doneRecent };
+}
+
+function NotesBoard({ notes, reload, people, onOpenOrder }) {
+  const [showDone, setShowDone] = useState(false);
+  const { groups, doneRecent } = useMemo(() => groupNotes(notes), [notes]);
+  return (
+    <section className="app-card p-5 space-y-4">
+      <div className="flex items-center gap-2 flex-wrap">
+        <StickyNote size={18} style={{ color: 'var(--color-primary)' }} aria-hidden="true" />
+        <h3 className="pc-h3" style={{ margin: 0 }}>Что передать смене</h3>
+      </div>
+      <p className="pc-hint">Пишите в течение дня, как только вспомнили. Заметка всплывёт в тот день, на который поставлена, и уйдёт в журнал при сдаче смены.</p>
+      <NoteForm onAdded={reload} people={people} />
+      <div className="space-y-4">
+        {groups.map((g) => (
+          <div key={g.key} className="pc-note-group">
+            <div className="pc-note-group__title">
+              <b className={g.tone === 'error' ? 'pc-warn-text' : ''}>{g.title}</b>
+              {g.sub && <span className="pc-muted">{g.sub}</span>}
+              <span className={`badge ${g.tone === 'error' ? 'badge--error' : 'badge--neutral'}`}>{g.items.length}</span>
+            </div>
+            {g.items.length === 0
+              ? <p className="pc-muted pc-note-empty">На сегодня заметок нет.</p>
+              : <ul className="pc-notes">{g.items.map((n) => <NoteRow key={n.id} n={n} onChanged={reload} onOpenOrder={onOpenOrder} showDue={g.showDue} />)}</ul>}
+          </div>
+        ))}
+        {doneRecent.length > 0 && (
+          <div className="pc-note-group">
+            <button type="button" className="pc-link" onClick={() => setShowDone((v) => !v)}>
+              {showDone ? 'Скрыть сделанное' : `Сделано за неделю — ${doneRecent.length}`}
+            </button>
+            {showDone && <ul className="pc-notes">{doneRecent.map((n) => <NoteRow key={n.id} n={n} onChanged={reload} onOpenOrder={onOpenOrder} showDue />)}</ul>}
+          </div>
+        )}
+      </div>
+    </section>
+  );
+}
+
+/** Заметки прямо в карточке заказа: что уже висит по заказу и быстрая новая. */
+function OrderNotes({ orderId, notes, reload, people }) {
+  const mine = notes.filter((n) => n.order?.order_id === orderId && !n.done);
+  return (
+    <div className="pc-order-notes">
+      <div className="pc-note-group__title"><StickyNote size={15} aria-hidden="true" /><b>Заметка смене по заказу</b>
+        {mine.length > 0 && <span className="badge badge--warning">{mine.length}</span>}</div>
+      {mine.length > 0 && (
+        <ul className="pc-notes">{mine.map((n) => <NoteRow key={n.id} n={n} onChanged={reload} onOpenOrder={() => {}} showDue />)}</ul>
+      )}
+      <NoteForm onAdded={reload} fixedOrderId={orderId} people={people} idPrefix="onote" />
+    </div>
+  );
+}
+
 /* ── касса и передача смены ─────────────────────────────────────── */
 const CHECKLIST = [
   'Касса пересчитана',
@@ -445,8 +632,22 @@ function NameInput({ id, value, onChange, people, placeholder }) {
 }
 const toNum = (v) => (String(v).trim() === '' ? null : Number(String(v).replace(/\s/g, '').replace(',', '.')));
 
+function Passed({ rec }) {
+  const items = rec.passed || [];
+  if (!items.length && !rec.notes) return null;
+  return (
+    <ul className="pc-passed">
+      {items.map((n) => (
+        <li key={n.id}>{n.doc_num && <b className="pc-num">{n.doc_num} </b>}{n.text}
+          {n.due !== rec.at.slice(0, 10) && <span className="pc-muted"> · {dueLabel(n.due)}</span>}</li>
+      ))}
+      {rec.notes && <li style={{ whiteSpace: 'pre-wrap' }}>{rec.notes}</li>}
+    </ul>
+  );
+}
+
 function AcceptForm({ rec, people, onDone }) {
-  const [by, setBy] = useState('');
+  const [by, setBy] = useState(readName);
   const [cash, setCash] = useState('');
   const [comment, setComment] = useState('');
   const [busy, setBusy] = useState(false);
@@ -456,6 +657,7 @@ function AcceptForm({ rec, people, onDone }) {
     setBusy(true); setErr('');
     try {
       await api.post(`/point/handover/${rec.id}/accept`, { by, cash_counted: toNum(cash), comment });
+      saveName(by);
       onDone();
     } catch (e2) { setErr(errText(e2, 'Не удалось сохранить.')); } finally { setBusy(false); }
   };
@@ -470,7 +672,7 @@ function AcceptForm({ rec, people, onDone }) {
         {rec.cash_agbis != null ? ` · по Агбису ${money(rec.cash_agbis)}` : ''}
         {' '}<Diff counted={rec.cash_counted} agbis={rec.cash_agbis} />
       </div>
-      {rec.notes && <div className="pc-answer"><div className="pc-muted">Передаёт на смену</div><p style={{ whiteSpace: 'pre-wrap' }}>{rec.notes}</p></div>}
+      {((rec.passed || []).length > 0 || rec.notes) && <div className="pc-answer"><div className="pc-muted">Передано на смену</div><Passed rec={rec} /></div>}
       <div className="pc-form-grid">
         <label htmlFor="acc-by">Кто принимает<NameInput id="acc-by" value={by} onChange={setBy} people={people} placeholder="Фамилия Имя" /></label>
         <label htmlFor="acc-cash">Мой пересчёт кассы, ₽<input id="acc-cash" className="input" inputMode="decimal" value={cash} onChange={(e) => setCash(e.target.value)} placeholder="если пересчитали" /></label>
@@ -484,27 +686,28 @@ function AcceptForm({ rec, people, onDone }) {
   );
 }
 
-function Handover({ tick, people }) {
+function Handover({ tick, people, notes, reloadNotes, onOpenOrder }) {
   const [reload, setReload] = useState(0);
   const { data, loading, error } = useSection('/point/handover', true, tick + reload);
   const cashInfo = useSection('/point/cash', true, tick + reload);
-  const [by, setBy] = useState('');
+  const [by, setBy] = useState(readName);
   const [cash, setCash] = useState('');
   const [checks, setChecks] = useState([]);
-  const [notes, setNotes] = useState('');
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
   const [saved, setSaved] = useState(false);
 
   const agbis = cashInfo.data?.balance;
+  const passCount = notes.filter((n) => !n.done && n.due <= isoDay(1)).length;
   const pending = (data || []).find((r) => !r.accepted);
   const toggle = (item) => setChecks((c) => (c.includes(item) ? c.filter((x) => x !== item) : [...c, item]));
   const submit = async (e) => {
     e.preventDefault();
     setBusy(true); setErr(''); setSaved(false);
     try {
-      await api.post('/point/handover', { by, cash_counted: toNum(cash), checklist: checks, notes });
-      setCash(''); setChecks([]); setNotes(''); setSaved(true);
+      await api.post('/point/handover', { by, cash_counted: toNum(cash), checklist: checks });
+      saveName(by);
+      setCash(''); setChecks([]); setSaved(true);
       setReload((r) => r + 1);
     } catch (e2) { setErr(errText(e2, 'Не удалось сохранить.')); } finally { setBusy(false); }
   };
@@ -512,6 +715,8 @@ function Handover({ tick, people }) {
   return (
     <div className="space-y-5">
       {pending && <AcceptForm key={pending.id} rec={pending} people={people} onDone={() => setReload((r) => r + 1)} />}
+
+      <NotesBoard notes={notes} reload={reloadNotes} people={people} onOpenOrder={onOpenOrder} />
 
       <form className="app-card p-5 space-y-4" onSubmit={submit}>
         <h3 className="pc-h3">Сдать смену</h3>
@@ -534,10 +739,11 @@ function Handover({ tick, people }) {
             </label>
           ))}
         </fieldset>
-        <label htmlFor="ho-notes" className="pc-field">Что передать следующей смене
-          <textarea id="ho-notes" className="input" rows={3} value={notes} onChange={(e) => setNotes(e.target.value)} maxLength={2000}
-            placeholder="Клиент придёт за сапогами к 12, перезвонить по заказу 22585-8, кончились пакеты…" />
-        </label>
+        <p className="pc-hint">
+          {passCount
+            ? `С передачей уйдут ${passCount} открытых заметок на сегодня и завтра — они в блоке «Что передать смене» выше.`
+            : 'Открытых заметок на сегодня и завтра нет — если что-то нужно передать, добавьте выше.'}
+        </p>
         {err && <p className="pc-error">{err}</p>}
         {saved && <p className="pc-ok">Записано. Следующий администратор увидит запись и подтвердит приём.</p>}
         <button type="submit" className="btn btn--primary" disabled={busy || by.trim().length < 2}>{busy ? 'Сохраняю…' : 'Смену сдал(а)'}</button>
@@ -566,7 +772,7 @@ function Handover({ tick, people }) {
                         <div className="pc-muted">нет: {CHECKLIST.filter((x) => !r.checklist.includes(x)).join(', ').toLowerCase()}</div>
                       )}
                     </td>
-                    <td style={{ whiteSpace: 'pre-wrap', minWidth: '16rem' }}>{r.notes || <span className="pc-muted">—</span>}</td>
+                    <td style={{ minWidth: '16rem' }}>{(r.passed || []).length || r.notes ? <Passed rec={r} /> : <span className="pc-muted">—</span>}</td>
                     <td>
                       {r.accepted ? (
                         <>
@@ -761,6 +967,7 @@ function Cabinet() {
   const [tab, setTab] = useState('today');
   const [tick, setTick] = useState(0);
   const [order, setOrder] = useState(null);
+  const [notes, setNotes] = useState([]);
   const inputRef = useRef(null);
   useBackClose(!!order, () => setOrder(null));
 
@@ -773,13 +980,20 @@ function Cabinet() {
       .finally(() => setLoading(false));
   }, []);
 
+  const loadNotes = useCallback(() => {
+    api.get('/point/notes').then((r) => setNotes(r.data || [])).catch(() => {});
+  }, []);
+
   useEffect(() => {
     api.get('/point/me').then((r) => setMe(r.data)).catch(() => {});
     load();
-    // Экран висит на стойке весь день — обновляемся сами каждые 5 минут.
+    loadNotes();
+    // Экран висит на стойке весь день — обновляемся сами каждые 5 минут
+    // (заметки — каждую минуту: их пишут с другого ПК той же точки).
     const t = window.setInterval(() => load(), 5 * 60 * 1000);
-    return () => window.clearInterval(t);
-  }, [load]);
+    const tn = window.setInterval(() => loadNotes(), 60 * 1000);
+    return () => { window.clearInterval(t); window.clearInterval(tn); };
+  }, [load, loadNotes]);
 
   // Ручной сканер печатает бирку как клавиатура: первая цифра возвращает
   // фокус в поле поиска, где бы ни был курсор.
@@ -804,8 +1018,12 @@ function Cabinet() {
       due,
       dueToday: due.filter((r) => !(r.overdue_days > 0)),
       overdue: due.filter((r) => r.overdue_days > 0),
+      notesNow: notes.filter((n) => !n.done && n.due <= isoDay(0)).length,
     };
-  }, [d]);
+  }, [d, notes]);
+  const notesToday = notes.filter((n) => !n.done && n.due <= isoDay(0))
+    .sort((a, b) => (a.due + a.created_at).localeCompare(b.due + b.created_at));
+  const people = (d?.shift?.people || []).map((p) => p.name);
 
   const openDoc = async (docNum) => {
     try {
@@ -813,7 +1031,7 @@ function Cabinet() {
       if (r.data.order_id) setOrder({ orderId: r.data.order_id });
     } catch { /* номер не нашёлся — ничего не открываем */ }
   };
-  const refresh = () => { load(true); setTick((t) => t + 1); };
+  const refresh = () => { load(true); loadNotes(); setTick((t) => t + 1); };
   const shift = d?.shift;
   const [eyebrow, title, sub] = TITLES[tab];
   const openRow = (id) => setOrder({ orderId: id });
@@ -840,7 +1058,7 @@ function Cabinet() {
                       className={`sidebar__link ${tab === key ? 'is-active' : ''}`}>
                       <Icon size={16} strokeWidth={1.4} className="shrink-0" />
                       <span>{label}</span>
-                      {count && d && <small className="pc-count">{count(lists)}</small>}
+                      {count && d && count(lists) != null && <small className="pc-count">{count(lists)}</small>}
                     </button>
                   ))}
                 </div>
@@ -896,6 +1114,18 @@ function Cabinet() {
                     sub={d.old_due_count ? `и ещё ${d.old_due_count} старше 60 дней` : 'за 60 дней'} onClick={() => setTab('due')} />
                   <StatCard icon={<Archive size={18} />} label="Долго лежат" value={lists.stale.length} sub="готовы больше 14 дней" onClick={() => setTab('stale')} />
                 </div>
+                {notesToday.length > 0 && (
+                  <section className="app-card p-5 space-y-3">
+                    <div className="pc-note-group__title">
+                      <StickyNote size={16} style={{ color: 'var(--color-primary)' }} aria-hidden="true" />
+                      <b>Заметки на сегодня</b><span className="badge badge--warning">{notesToday.length}</span>
+                      <button type="button" className="pc-link" style={{ marginLeft: 'auto' }} onClick={() => setTab('handover')}>все заметки</button>
+                    </div>
+                    <ul className="pc-notes">
+                      {notesToday.map((n) => <NoteRow key={n.id} n={n} onChanged={loadNotes} onOpenOrder={openRow} showDue={n.due < isoDay(0)} />)}
+                    </ul>
+                  </section>
+                )}
                 <h3 className="pc-h3">Позвонить сейчас <span className="badge badge--neutral">{lists.toCall.length}</span></h3>
                 <p className="pc-hint">Готовые заказы без отметки звонка. Отметьте результат — строка уйдёт из списка.</p>
                 <OrdersTable rows={lists.toCall.slice(0, 15)} kind="ready" onOpen={openRow} onMarked={() => load()}
@@ -916,7 +1146,7 @@ function Cabinet() {
               </>
             )}
             {d && tab === 'stale' && <OrdersTable rows={lists.stale} kind="ready" onOpen={openRow} onMarked={() => load()} empty="Таких заказов нет." />}
-            {tab === 'handover' && <Handover tick={tick} people={(shift?.people || []).map((p) => p.name)} />}
+            {tab === 'handover' && <Handover tick={tick} people={people} notes={notes} reloadNotes={loadNotes} onOpenOrder={openRow} />}
             {tab === 'cash' && <Cash tick={tick} />}
             {tab === 'accepted' && <Accepted tick={tick} onOpen={openRow} />}
             {tab === 'logistics' && <Logistics tick={tick} />}
@@ -934,6 +1164,7 @@ function Cabinet() {
             <button type="button" className="icon-button pc-drawer__close" onClick={() => setOrder(null)} aria-label="Закрыть">
               <X size={18} />
             </button>
+            <OrderNotes orderId={order.orderId} notes={notes} reload={loadNotes} people={people} />
             <OrderView key={`${order.orderId}-${order.serviceId || ''}`} orderId={order.orderId}
               highlightServiceId={order.serviceId || null} apiBase="/point" />
           </div>

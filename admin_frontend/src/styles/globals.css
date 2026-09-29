@@ -8040,3 +8040,34 @@ button:hover > .vac-desc { color: var(--color-text); }
 .pc-warn-text { color: var(--color-danger); font-size: 0.85rem; margin-top: 2px; }
 .pc-table tr.is-pending td { background: color-mix(in srgb, var(--color-warning) 7%, transparent); }
 @media (max-width: 700px) { .pc-form-grid, .pc-checks { grid-template-columns: 1fr; } }
+
+/* Кабинет точки: заметки смены. */
+.pc-note-form { display: flex; flex-direction: column; gap: 10px; }
+.pc-note-form__main { display: grid; grid-template-columns: minmax(0, 1fr) 11rem; gap: 8px; }
+.pc-note-form__main:has(> :only-child) { grid-template-columns: 1fr; }
+.pc-note-form__row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.pc-note-form__by { flex: 1 1 10rem; max-width: 16rem; display: flex; }
+.pc-note-form__by .input { width: 100%; }
+.pc-due { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.pc-date { width: auto; padding-block: 6px; font-size: 0.85rem; }
+.pc-date.is-on { outline: 2px solid var(--color-primary); outline-offset: -1px; }
+.pc-note-group { display: flex; flex-direction: column; gap: 6px; }
+.pc-note-group__title { display: flex; align-items: center; gap: 8px; font-size: 0.95rem; }
+.pc-note-empty { margin: 0; padding-left: 2px; }
+.pc-notes { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.pc-note { display: flex; align-items: flex-start; gap: 10px; padding: 9px 4px; border-top: 1px solid var(--color-border); }
+.pc-note:first-child { border-top: 0; }
+.pc-note > input[type=checkbox] { width: 17px; height: 17px; margin-top: 2px; accent-color: var(--color-primary); cursor: pointer; flex: none; }
+.pc-note__body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.pc-note__text { font-size: 0.92rem; color: var(--color-text); overflow-wrap: anywhere; }
+.pc-note.is-done .pc-note__text { text-decoration: line-through; color: var(--color-muted-foreground, var(--color-text-muted)); }
+.pc-note__meta { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; font-size: 0.78rem; color: var(--color-muted-foreground, var(--color-text-muted)); }
+.pc-note__order { border: 0; padding: 2px 8px; border-radius: 6px; font: inherit; font-weight: 600; font-variant-numeric: tabular-nums; cursor: pointer;
+  background: color-mix(in srgb, var(--color-primary) 12%, transparent); color: var(--color-primary); }
+.pc-note__order:hover { background: color-mix(in srgb, var(--color-primary) 20%, transparent); }
+.pc-note__actions { display: flex; align-items: center; gap: 6px; flex: none; }
+.pc-link { border: 0; background: none; padding: 0; font: inherit; font-size: 0.85rem; color: var(--color-primary); cursor: pointer; text-align: left; }
+.pc-link:hover { text-decoration: underline; }
+.pc-passed { margin: 0; padding-left: 1.1rem; display: flex; flex-direction: column; gap: 3px; font-size: 0.88rem; }
+.pc-order-notes { margin: 0 0 16px; padding: 14px; border-radius: 14px; border: 1px dashed var(--color-border); display: flex; flex-direction: column; gap: 10px; }
+@media (max-width: 700px) { .pc-note-form__main { grid-template-columns: 1fr; } .pc-note { flex-wrap: wrap; } }

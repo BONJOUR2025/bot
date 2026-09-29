@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import time
+from datetime import date, timedelta
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Response
 from pydantic import BaseModel
@@ -38,6 +39,21 @@ class HandoverIn(BaseModel):
     cash_counted: float | None = None
     checklist: list[str] = []
     notes: str = ""
+
+
+class NoteIn(BaseModel):
+    text: str = ""
+    due: date
+    by: str = ""
+    order: str = ""
+    order_id: int | None = None
+
+
+class NotePatch(BaseModel):
+    due: date | None = None
+    done: bool | None = None
+    text: str | None = None
+    by: str = ""
 
 
 class HandoverAcceptIn(BaseModel):
@@ -221,8 +237,17 @@ def create_point_router() -> APIRouter:
             agbis = (await _run(point_service.cash, salon, 1)).get("balance")
         except Exception:
             pass
+        # Что передаём: открытые заметки по завтрашний день включительно —
+        # снимком, чтобы в журнале осталось, что висело на момент сдачи.
+        from app.data.point_device_repository import PointNoteRepository
+
+        until = (date.today() + timedelta(days=1)).isoformat()
+        passed = [{"id": n["id"], "text": n["text"], "due": n["due"],
+                   "doc_num": (n.get("order") or {}).get("doc_num")}
+                  for n in PointNoteRepository().open_until(salon.id, until)]
         return PointHandoverRepository().add(salon.id, device["id"], by=data.by, cash_counted=data.cash_counted,
-                                             cash_agbis=agbis, checklist=data.checklist, notes=data.notes)
+                                             cash_agbis=agbis, checklist=data.checklist, notes=data.notes,
+                                             passed=passed)
 
     @router.post("/handover/{rec_id}/accept")
     async def handover_accept(rec_id: str, data: HandoverAcceptIn, dev=Depends(point_device)):
@@ -235,6 +260,51 @@ def create_point_router() -> APIRouter:
         if rec is None:
             raise HTTPException(404, "Запись не найдена.")
         return rec
+
+    # ── заметки смены: пишут в течение дня, на любую дату, к заказу ───
+    @router.get("/notes")
+    async def notes(dev=Depends(point_device)):
+        from app.data.point_device_repository import PointNoteRepository
+
+        return PointNoteRepository().list(dev[1].id)
+
+    @router.post("/notes")
+    async def note_add(data: NoteIn, dev=Depends(point_device)):
+        from app.data.point_device_repository import PointNoteRepository
+        from app.services import point_service
+        from app.services import workshop_order_service as orders
+
+        device, salon = dev
+        if len(data.text.strip()) < 2:
+            raise HTTPException(400, "Напишите, что передать.")
+        if data.due < date.today():
+            raise HTTPException(400, "Эта дата уже прошла.")
+        order = None
+        if data.order.strip() or data.order_id:
+            try:
+                order = await _run(point_service.note_order, data.order.strip(), data.order_id)
+            except orders.OrderNotFound as exc:
+                raise HTTPException(400, str(exc))
+        return PointNoteRepository().add(salon.id, device["id"], text=data.text, due=data.due.isoformat(),
+                                         by=data.by, order=order)
+
+    @router.patch("/notes/{note_id}")
+    async def note_update(note_id: str, data: NotePatch, dev=Depends(point_device)):
+        from app.data.point_device_repository import PointNoteRepository
+
+        rec = PointNoteRepository().update(dev[1].id, note_id, due=data.due.isoformat() if data.due else None,
+                                           done=data.done, by=data.by, text=data.text)
+        if rec is None:
+            raise HTTPException(404, "Заметка не найдена.")
+        return rec
+
+    @router.delete("/notes/{note_id}")
+    async def note_delete(note_id: str, dev=Depends(point_device)):
+        from app.data.point_device_repository import PointNoteRepository
+
+        if not PointNoteRepository().delete(dev[1].id, note_id):
+            raise HTTPException(404, "Заметка не найдена.")
+        return {"ok": True}
 
     # ── клиенты: поиск, история, пароль от личного кабинета ───────────
     @router.get("/clients/search")

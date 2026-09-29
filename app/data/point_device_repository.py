@@ -17,7 +17,7 @@ import secrets
 from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 
-from app.config import POINT_CALLS_FILE, POINT_DEVICES_FILE, POINT_HANDOVERS_FILE
+from app.config import POINT_CALLS_FILE, POINT_DEVICES_FILE, POINT_HANDOVERS_FILE, POINT_NOTES_FILE
 
 CODE_TTL = timedelta(minutes=15)
 
@@ -181,13 +181,13 @@ class PointHandoverRepository:
         return list(reversed(rows))[:limit]
 
     def add(self, salon_id: str, device_id: str, *, by: str, cash_counted, cash_agbis,
-            checklist: list[str], notes: str) -> dict[str, Any]:
+            checklist: list[str], notes: str, passed: Optional[list[dict[str, Any]]] = None) -> dict[str, Any]:
         data = _load(self._file, [])
         rec = {"id": secrets.token_hex(5), "salon_id": salon_id, "device_id": device_id,
                "at": _now().isoformat(), "by": by.strip()[:80],
                "cash_counted": _money_or_none(cash_counted), "cash_agbis": _money_or_none(cash_agbis),
                "checklist": [str(x)[:80] for x in checklist][:12], "notes": (notes or "").strip()[:2000],
-               "accepted": None}
+               "passed": passed or [], "accepted": None}
         data.append(rec)
         mine = [r for r in data if r.get("salon_id") == salon_id]
         if len(mine) > self.KEEP:
@@ -207,3 +207,63 @@ class PointHandoverRepository:
                            "cash_counted": _money_or_none(cash_counted), "comment": (comment or "").strip()[:1000]}
         _save(self._file, data)
         return rec
+
+
+class PointNoteRepository:
+    """Заметки смены: «что передать» пишут в течение дня, а не одним полем при
+    уходе. У каждой — дата, на которую она (сегодня, завтра, через неделю),
+    и, если она про заказ, — сам заказ. Закрывает тот, кто сделал.
+
+    Закрытые храним DONE_KEEP_DAYS дней — видно, что сделано, а файл не
+    растёт бесконечно."""
+
+    DONE_KEEP_DAYS = 30
+
+    def __init__(self, file_path: Optional[str] = None) -> None:
+        self._file = file_path or POINT_NOTES_FILE
+
+    def _prune(self, data: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        edge = (_now() - timedelta(days=self.DONE_KEEP_DAYS)).isoformat()
+        return [n for n in data if not n.get("done") or n["done"].get("at", "") > edge]
+
+    def list(self, salon_id: str) -> list[dict[str, Any]]:
+        return [n for n in _load(self._file, []) if n.get("salon_id") == salon_id]
+
+    def open_until(self, salon_id: str, until: str) -> list[dict[str, Any]]:
+        return sorted((n for n in self.list(salon_id) if not n.get("done") and n.get("due", "") <= until),
+                      key=lambda n: (n.get("due", ""), n.get("created_at", "")))
+
+    def add(self, salon_id: str, device_id: str, *, text: str, due: str, by: str,
+            order: Optional[dict[str, Any]]) -> dict[str, Any]:
+        data = self._prune(_load(self._file, []))
+        rec = {"id": secrets.token_hex(5), "salon_id": salon_id, "device_id": device_id,
+               "text": text.strip()[:500], "due": due, "by": (by or "").strip()[:80],
+               "created_at": _now().isoformat(), "order": order, "done": None}
+        data.append(rec)
+        _save(self._file, data)
+        return rec
+
+    def update(self, salon_id: str, note_id: str, *, due: Optional[str] = None, done: Optional[bool] = None,
+               by: str = "", text: Optional[str] = None) -> Optional[dict[str, Any]]:
+        data = _load(self._file, [])
+        rec = next((n for n in data if n.get("id") == note_id and n.get("salon_id") == salon_id), None)
+        if rec is None:
+            return None
+        if due is not None:
+            rec["due"] = due
+        if text is not None and text.strip():
+            rec["text"] = text.strip()[:500]
+        if done is True and not rec.get("done"):
+            rec["done"] = {"at": _now().isoformat(), "by": (by or "").strip()[:80]}
+        elif done is False:
+            rec["done"] = None
+        _save(self._file, self._prune(data))
+        return rec
+
+    def delete(self, salon_id: str, note_id: str) -> bool:
+        data = _load(self._file, [])
+        left = [n for n in data if not (n.get("id") == note_id and n.get("salon_id") == salon_id)]
+        if len(left) == len(data):
+            return False
+        _save(self._file, left)
+        return True

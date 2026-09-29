@@ -46,3 +46,22 @@ def test_handover_add_accept_and_scope(tmp_path):
     assert done["accepted"]["by"] == "Петрова" and done["accepted"]["cash_counted"] == 990
     again = repo.accept("s1", rec["id"], by="Сидорова", cash_counted=1, comment="")
     assert again["accepted"]["by"] == "Петрова"
+
+
+def test_notes_lifecycle_and_scope(tmp_path):
+    from app.data.point_device_repository import PointNoteRepository
+
+    repo = PointNoteRepository(str(tmp_path / "n.json"))
+    a = repo.add("s1", "d1", text="перезвонить", due="2026-10-01", by="Иванова",
+                 order={"order_id": 5, "doc_num": "22585-8", "client": ""})
+    repo.add("s1", "d1", text="пакеты", due="2026-10-09", by="", order=None)
+    repo.add("s2", "d9", text="чужая", due="2026-10-01", by="", order=None)
+    assert [n["text"] for n in repo.open_until("s1", "2026-10-02")] == ["перезвонить"]
+    assert repo.update("s2", a["id"], done=True) is None
+    moved = repo.update("s1", a["id"], due="2026-10-10")
+    assert moved["due"] == "2026-10-10" and repo.open_until("s1", "2026-10-02") == []
+    done = repo.update("s1", a["id"], done=True, by="Петрова")
+    assert done["done"]["by"] == "Петрова"
+    assert repo.update("s1", a["id"], done=False)["done"] is None
+    assert repo.delete("s1", a["id"]) and not repo.delete("s1", a["id"])
+    assert len(repo.list("s1")) == 1

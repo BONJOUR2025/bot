@@ -199,6 +199,30 @@ def cash(salon, days: int = CASH_DAYS) -> dict[str, Any]:
             "days": list(reversed(data.get("days", []))), "entries": entries}
 
 
+def note_order(query: str = "", order_id: int | None = None) -> dict[str, Any]:
+    """Заказ для заметки по номеру или бирке: id, номер и клиент — чтобы в
+    списке было «22585-8 · Иванова», а не голое число. Номер без суффикса,
+    под который подходит несколько заказов, не угадываем."""
+    from app.services import workshop_order_service as orders
+    from app.services.firebird_service import _connect
+    from app.services.workshop_order_service import _text
+
+    found = {"order_id": order_id} if order_id else orders.find(query)
+    if "order_id" not in found:
+        nums = ", ".join(c["doc_num"] for c in found.get("choices", [])[:4])
+        raise orders.OrderNotFound(f"Под этот номер подходит несколько заказов — уточните: {nums}")
+    con = _connect()
+    try:
+        cur = con.cursor()
+        cur.execute("SELECT d.doc_num, c.name FROM docs_order dor JOIN docs d ON d.doc_id = dor.doc_id "
+                    "LEFT JOIN contragents c ON c.contr_id = d.contragent_id WHERE dor.id = ?", (found["order_id"],))
+        row = cur.fetchone()
+    finally:
+        con.close()
+    return {"order_id": found["order_id"], "doc_num": _text(row[0]) if row else query,
+            "client": _text(row[1]) if row else ""}
+
+
 # ── приём сегодня и перемещения точка ↔ цех ─────────────────────────
 def accepted_today(salon) -> list[dict[str, Any]]:
     """Заказы, принятые на точке сегодня: что именно и на кого."""
