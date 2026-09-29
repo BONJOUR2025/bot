@@ -4,6 +4,8 @@ import api from '../../api.js';
 import { PhotoViewer } from '../../components/OrderPhotos.jsx';
 import WebScanner, { canScanInBrowser } from './WebScanner.jsx';
 import { money, serviceTitle, workshopPhotoPath } from './masterFormat.js';
+
+const pointPhotoPath = (p) => `/point/photos/${p.id}/full?md5=${encodeURIComponent(p.md5)}`;
 import useBackClose from '../../hooks/useBackClose.js';
 
 /** Поиск заказа (номер или бирка) и карточка заказа для старшего мастера,
@@ -53,7 +55,7 @@ function splitServices(services) {
  *  `scanMode` — для сканера бирок в админке: поле в фокусе с самого начала,
  *  а после поиска текст выделен, чтобы следующая бирка (ручной сканер
  *  печатает её как клавиатура) заменила предыдущую, а не дописалась к ней. */
-export function OrderSearch({ onOpen, inputRef, scanMode = false }) {
+export function OrderSearch({ onOpen, inputRef, scanMode = false, apiBase = '/workshop' }) {
   const ownRef = useRef(null);
   const input = inputRef || ownRef;
   const [q, setQ] = useState('');
@@ -71,7 +73,7 @@ export function OrderSearch({ onOpen, inputRef, scanMode = false }) {
     setError('');
     setChoices(null);
     try {
-      const res = await api.get('/workshop/orders/find', { params: { q: text } });
+      const res = await api.get(`${apiBase}/orders/find`, { params: { q: text } });
       if (res.data.order_id) onOpen(res.data.order_id, res.data.service_id || null);
       else setChoices(res.data.choices || []);
     } catch (e) {
@@ -80,7 +82,7 @@ export function OrderSearch({ onOpen, inputRef, scanMode = false }) {
       setBusy(false);
       if (scanMode) input.current?.select();
     }
-  }, [onOpen, scanMode, input]);
+  }, [onOpen, scanMode, input, apiBase]);
 
   useEffect(() => {
     const onScan = (event) => {
@@ -231,7 +233,10 @@ function LeadScanDialog({ service, action, masters, onClose, onDone }) {
 /** Карточка заказа. `highlightServiceId` — строка заказа, чью бирку
  *  отсканировали: услуга или (почти у половины бирок) изделие целиком.
  *  Она подсвечена и прокручена в поле зрения. Без `onBack` кнопки «Назад» нет. */
-export function OrderView({ orderId, onBack, backLabel = 'Назад к цеху', highlightServiceId = null }) {
+/*  `apiBase='/point'` — та же карточка в кабинете точки: по ключу ПК, без
+ *  отметок «вход/выход за мастера» (это дело старшего мастера, а не точки). */
+export function OrderView({ orderId, onBack, backLabel = 'Назад к цеху', highlightServiceId = null, apiBase = '/workshop' }) {
+  const isWorkshop = apiBase === '/workshop';
   const hitRef = useRef(null);
   const [o, setO] = useState(null);
   const [error, setError] = useState('');
@@ -241,10 +246,10 @@ export function OrderView({ orderId, onBack, backLabel = 'Назад к цеху
 
   const load = useCallback(() => {
     setError('');
-    api.get(`/workshop/orders/${orderId}`)
+    api.get(`${apiBase}/orders/${orderId}`)
       .then((r) => setO(r.data))
       .catch((e) => setError(detail(e, 'Не удалось загрузить заказ.')));
-  }, [orderId]);
+  }, [orderId, apiBase]);
 
   useEffect(() => { load(); }, [load]);
   useEffect(() => {
@@ -256,8 +261,9 @@ export function OrderView({ orderId, onBack, backLabel = 'Назад к цеху
     if (r.top < 90 || r.bottom > window.innerHeight) el.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
   }, [o, highlightServiceId]);
   useEffect(() => {
+    if (!isWorkshop) return;
     api.get('/workshop/masters').then((r) => setMasters(r.data || [])).catch(() => setMasters([]));
-  }, []);
+  }, [isWorkshop]);
 
   const due = o?.due_state === 'overdue' ? 'badge--error' : o?.due_state === 'today' ? 'badge--warning' : 'badge--neutral';
 
@@ -352,7 +358,7 @@ export function OrderView({ orderId, onBack, backLabel = 'Назад к цеху
                     {s.moves.length > 0 && (
                       <p className="ws-sub">Накладные: {s.moves.map((m) => `${day(m.date)} ${m.from} → ${m.to} (${m.status})`).join('; ')}</p>
                     )}
-                    {s.barcode && s.workshop_work && s.status_id !== 7 && (
+                    {isWorkshop && s.barcode && s.workshop_work && s.status_id !== 7 && (
                       <div className="wo-lead">
                         <button type="button" className="ui-chip" onClick={() => setDialog({ service: s, action: 'in' })}>Вход за мастера</button>
                         <button type="button" className="ui-chip" onClick={() => setDialog({ service: s, action: 'out' })}>Выход за мастера</button>
@@ -372,7 +378,7 @@ export function OrderView({ orderId, onBack, backLabel = 'Назад к цеху
           index={viewer.index}
           onIndex={(index) => setViewer((v) => (v ? { ...v, index } : v))}
           onClose={() => setViewer(null)}
-          pathFor={workshopPhotoPath}
+          pathFor={isWorkshop ? workshopPhotoPath : pointPhotoPath}
         />
       )}
       {dialog && (

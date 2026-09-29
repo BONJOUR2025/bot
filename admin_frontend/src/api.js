@@ -1,5 +1,8 @@
 import axios from 'axios';
 
+export const POINT_TOKEN_KEY = 'point_token';
+const isPointRequest = (url) => /^\/?point\//.test(String(url || ''));
+
 const api = axios.create({
   baseURL: '/api',
   withCredentials: true,
@@ -10,6 +13,15 @@ api.interceptors.request.use((config) => {
   if (token) {
     config.headers = config.headers || {};
     config.headers.Authorization = `Bearer ${token}`;
+  }
+  // Кабинет точки на ПК салона входит не по логину, а по ключу компьютера.
+  if (isPointRequest(config.url)) {
+    let pointToken = null;
+    try { pointToken = localStorage.getItem(POINT_TOKEN_KEY); } catch { /* нет доступа — войти не выйдет */ }
+    if (pointToken) {
+      config.headers = config.headers || {};
+      config.headers['X-Point-Token'] = pointToken;
+    }
   }
   return config;
 });
@@ -54,6 +66,12 @@ api.interceptors.response.use(
       } catch {
         error.response.data.detail = 'Некорректные данные запроса';
       }
+    }
+    if (error.response?.status === 401 && isPointRequest(error.config?.url)) {
+      // Ключ ПК отозван или неверный — кабинет точки сам покажет ввод кода,
+      // на страницу входа сотрудника отсюда уводить нельзя.
+      window.dispatchEvent(new CustomEvent('point-unauthorized'));
+      return Promise.reject(error);
     }
     if (error.response?.status === 401) {
       localStorage.removeItem('auth_token');

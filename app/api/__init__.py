@@ -414,6 +414,13 @@ def create_app() -> FastAPI:
     app.include_router(create_master_app_public_router(), prefix="/api")
     app.include_router(create_salon_app_public_router(), prefix="/api")
 
+    # Кабинет точки на рабочих ПК салонов: вход по ключу компьютера, не по
+    # сессии, поэтому без protected. Выдача кодов — под правом salons.
+    from .point import create_point_admin_router, create_point_router
+
+    app.include_router(create_point_router(), prefix="/api")
+    app.include_router(create_point_admin_router(), prefix="/api", dependencies=protected)
+
     # Цех — приложение старшего мастера, под правом «workshop».
     from .workshop import create_workshop_router
 

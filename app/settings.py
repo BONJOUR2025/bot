@@ -159,6 +159,9 @@ class Settings(BaseSettings):
 
     # Салонные компьютеры под наблюдением (агент только отчитывается)
     workstations_file: str = Field("workstations.json", validation_alias="WORKSTATIONS_FILE")
+    # Кабинет точки на рабочих ПК салонов: подключённые компьютеры и отметки звонков.
+    point_devices_file: str = Field("point_devices.json", validation_alias="POINT_DEVICES_FILE")
+    point_calls_file: str = Field("point_calls.json", validation_alias="POINT_CALLS_FILE")
 
     # Ключ первичной регистрации агента на ПК. Отдельный от MDM-ключа
     # намеренно: утёкший ключ с кассового компьютера не должен позволять

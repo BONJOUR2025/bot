@@ -87,6 +87,7 @@ const VisitorCounters = lazy(() => import("./pages/VisitorCounters"));
 const MdmDevices = lazy(() => import("./pages/MdmDevices"));
 const Scanner3D = lazy(() => import("./pages/Scanner3D"));
 const TagScanner = lazy(() => import("./pages/TagScanner"));
+const PointCabinet = lazy(() => import("./pages/PointCabinet"));
 const SalonAudio = lazy(() => import("./pages/SalonAudio"));
 
 function RouteFallback() {
@@ -122,6 +123,9 @@ export default function App() {
               {/* Редиректы со старых адресов */}
               <Route path="/admin/login" element={<Navigate to="/login" replace />} />
               <Route path="/employee/login" element={<Navigate to="/login" replace />} />
+
+              {/* Кабинет точки на ПК салона: вход по ключу компьютера, без RequireAuth */}
+              <Route path="/admin/point" element={<PointCabinet />} />
 
               {/* Приватная зона: всё под /admin защищено RequireAuth */}
               <Route

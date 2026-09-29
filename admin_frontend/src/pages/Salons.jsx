@@ -520,7 +520,7 @@ function SalonDetailModal({ salon, employees, onEdit, onDelete, onClose }) {
 
         {/* Tabs */}
         <div className="flex gap-1 pt-4 pb-2 border-b border-[color:var(--color-border)] overflow-x-auto">
-          {TABS.map(t => (
+          {[...TABS, { key: 'pc', label: 'Компьютеры' }].map(t => (
             <button
               key={t.key}
               onClick={() => setTab(t.key)}
@@ -628,6 +628,7 @@ function SalonDetailModal({ salon, employees, onEdit, onDelete, onClose }) {
               }
             </div>
           )}
+          {tab === 'pc' && <PointDevices salonId={salon.id} />}
         </div>
 
         {/* Footer */}
@@ -642,6 +643,70 @@ function SalonDetailModal({ salon, employees, onEdit, onDelete, onClose }) {
             </div>
           )}
         </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Кабинет точки: подключённые компьютеры ─────────────────────────
+// Код одноразовый, живёт 15 минут. На ПК точки открывают /admin/point и вводят
+// его — браузер получает свой ключ. Отключить компьютер можно здесь же.
+function PointDevices({ salonId }) {
+  const [devices, setDevices] = useState(null);
+  const [code, setCode] = useState(null);
+  const [error, setError] = useState('');
+
+  function load() {
+    api.get(`salons/${salonId}/point-devices`).then(r => setDevices(r.data || [])).catch(() => setDevices([]));
+  }
+  useEffect(load, [salonId]);
+
+  async function issue() {
+    setError('');
+    try {
+      const r = await api.post(`salons/${salonId}/point-code`);
+      setCode(r.data);
+    } catch (e) {
+      setError(e?.response?.data?.detail || 'Не удалось выдать код');
+    }
+  }
+  async function revoke(id) {
+    await api.delete(`salons/${salonId}/point-devices/${id}`).catch(() => {});
+    load();
+  }
+  const url = `${window.location.origin}/admin/point`;
+
+  return (
+    <div className="space-y-4">
+      <p className="text-sm text-[color:var(--color-muted-foreground)]">
+        Кабинет точки открывается на рабочем компьютере салона без логина: подключите компьютер один раз кодом.
+      </p>
+      <div className="rounded-xl border border-[color:var(--color-border)] p-4 space-y-3">
+        <div className="text-sm">1. На компьютере точки откройте <b className="font-mono">{url}</b></div>
+        <div className="text-sm">2. Введите код:</div>
+        {code ? (
+          <div className="flex items-baseline gap-3">
+            <span className="font-mono text-3xl font-bold tracking-[0.2em]">{code.code}</span>
+            <span className="text-xs text-[color:var(--color-muted-foreground)]">действует до {new Date(code.expires_at).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}</span>
+          </div>
+        ) : (
+          <button onClick={issue} className="btn btn--primary text-sm">Подключить компьютер</button>
+        )}
+        {error && <p className="text-sm text-red-600">{error}</p>}
+      </div>
+      <div>
+        <div className="text-sm font-medium mb-2">Подключённые компьютеры</div>
+        {devices === null ? <p className="text-sm text-[color:var(--color-muted-foreground)]">Загрузка…</p>
+          : devices.length === 0 ? <p className="text-sm text-[color:var(--color-muted-foreground)]">Пока ни одного.</p>
+          : devices.map(d => (
+            <div key={d.id} className="flex items-center justify-between gap-3 py-2 border-t border-[color:var(--color-border)] text-sm">
+              <div>
+                <div className="font-medium">{d.label || 'Компьютер'}</div>
+                <div className="text-xs text-[color:var(--color-muted-foreground)]">подключён {new Date(d.created_at).toLocaleDateString('ru-RU')} · последний раз {new Date(d.last_seen_at).toLocaleString('ru-RU', { dateStyle: 'short', timeStyle: 'short' })}</div>
+              </div>
+              <button onClick={() => { if (window.confirm('Отключить этот компьютер от кабинета точки?')) revoke(d.id); }} className="text-sm text-red-500 hover:text-red-700">Отключить</button>
+            </div>
+          ))}
       </div>
     </div>
   );
