@@ -35,7 +35,6 @@ const SECTIONS = [
     items: [
       { key: 'cash', label: 'Касса', icon: Wallet },
       { key: 'accepted', label: 'Принято сегодня', icon: Send },
-      { key: 'logistics', label: 'Перемещения', icon: Truck },
       { key: 'schedule', label: 'График', icon: CalendarDays },
     ],
   },
@@ -53,9 +52,8 @@ const TITLES = {
   due: ['Смена', 'Сроки', 'Не готово, а срок выдачи сегодня или уже прошёл. Предупредите клиента до того, как он приедет.'],
   stale: ['Смена', 'Долго лежат', 'Готовы больше 14 дней назад и до сих пор не выданы. Напомните клиенту.'],
   handover: ['Смена', 'Передача смены', 'Заметки для смены пишите в течение дня — на любую дату и к заказу. При уходе сдайте смену: пересчёт кассы и чек-лист.'],
-  cash: ['Точка', 'Касса', 'Движение по кассе точки в Агбисе за две недели: перемещения в «Основную», приход и остаток на конец дня.'],
+  cash: ['Точка', 'Касса', 'Касса точки в Агбисе за сегодня: остаток, приход и перемещения в «Основную».'],
   accepted: ['Точка', 'Принято сегодня', 'Заказы, оформленные на точке за сегодня.'],
-  logistics: ['Точка', 'Перемещения', 'Накладные между точкой и цехом за две недели: что едет к нам и что уехало.'],
   schedule: ['Точка', 'График на неделю', 'Кто работает на точке — по общему графику.'],
   clients: ['Помощь', 'Клиенты', 'Поиск по фамилии, телефону или номеру заказа. История заказов и пароль от личного кабинета.'],
   kb: ['Помощь', 'База знаний', 'Прайсы, методички и регламенты. Помощник отвечает на вопросы строго по ним.'],
@@ -263,56 +261,6 @@ function Accepted({ tick, onOpen }) {
           ))}
         </tbody>
       </table>
-    </div>
-  );
-}
-
-function Logistics({ tick }) {
-  const { data, loading, error } = useSection('/point/logistics', true, tick);
-  if (loading && !data) return <p className="pc-muted">Загрузка…</p>;
-  if (error) return <p className="pc-error">{error}</p>;
-  const inc = data?.incoming || [];
-  const out = data?.outgoing || [];
-  const open = (l) => l.filter((w) => w.status_id === 1 || w.status_id === 2);
-  const partial = [...inc, ...out].filter((w) => w.status_id === 4);
-  const place = (w, dirLabel) => (dirLabel === 'Маршрут' ? `${w.from} → ${w.to}` : dirLabel === 'Откуда' ? w.from : w.to);
-  const table = (rows, dirLabel) => (rows.length === 0
-    ? <div className="app-card p-6 text-sm text-[color:var(--color-muted-foreground)]">Нет.</div>
-    : (
-      <div className="app-card pc-table-wrap">
-        <table className="pc-table" style={{ minWidth: '40rem' }}>
-          <thead><tr><th>Накладная</th><th>Дата</th><th>{dirLabel}</th><th className="num">Изделий</th><th>Статус</th></tr></thead>
-          <tbody>
-            {rows.map((w) => (
-              <tr key={w.id} style={{ cursor: 'default' }}>
-                <td className="pc-num">{w.doc_num}</td>
-                <td>{day(w.date)}</td>
-                <td>{place(w, dirLabel)}</td>
-                <td className="num">{w.items}</td>
-                <td><span className={`badge ${w.status_id === 4 ? 'badge--error' : w.status_id === 2 ? 'badge--info' : 'badge--warning'}`}>{w.status}</span></td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    ));
-  return (
-    <div className="space-y-5">
-      {partial.length > 0 && (
-        <section className="space-y-2">
-          <h3 className="pc-h3">Принято не полностью <span className="badge badge--error">{partial.length}</span></h3>
-          <p className="pc-hint">Часть изделий по накладной не дошла — проверьте полку и сообщите в цех.</p>
-          {table(partial, 'Маршрут')}
-        </section>
-      )}
-      <section className="space-y-2">
-        <h3 className="pc-h3">Едет к нам <span className="badge badge--neutral">{open(inc).length}</span></h3>
-        {table(open(inc), 'Откуда')}
-      </section>
-      <section className="space-y-2">
-        <h3 className="pc-h3">Отправлено от нас, ещё не принято <span className="badge badge--neutral">{open(out).length}</span></h3>
-        {table(open(out), 'Куда')}
-      </section>
     </div>
   );
 }
@@ -569,17 +517,17 @@ function Cash({ tick }) {
           </div>
         </div>
         {rows.length === 0
-          ? <div className="app-card p-6 text-sm text-[color:var(--color-muted-foreground)]">За две недели таких проводок нет.</div>
+          ? <div className="app-card p-6 text-sm text-[color:var(--color-muted-foreground)]">Сегодня таких проводок нет.</div>
           : (
             <div className="app-card pc-table-wrap">
               <table className="pc-table" style={{ minWidth: '46rem' }}>
-                <thead><tr><th>Когда</th><th>Документ</th><th>Основание</th><th>Кто</th><th className="num">Сумма</th></tr></thead>
+                <thead><tr><th>Время</th><th>Документ</th><th>Основание</th><th>Кто</th><th className="num">Сумма</th></tr></thead>
                 <tbody>
                   {rows.map((e) => {
                     const amount = (e.debet || 0) - (e.kredit || 0);
                     return (
                       <tr key={e.id} style={{ cursor: 'default' }}>
-                        <td className="pc-num">{day(e.date)} {e.time}</td>
+                        <td className="pc-num">{e.time}</td>
                         <td className="pc-num">{e.doc_num}</td>
                         <td>
                           <div>{e.basis_text || e.basis_name}</div>
@@ -596,27 +544,6 @@ function Cash({ tick }) {
           )}
       </section>
 
-      <section className="space-y-2">
-        <h3 className="pc-h3">По дням</h3>
-        <p className="pc-hint">Остаток на конец дня — с ним сверяют пересчёт при передаче смены.</p>
-        <div className="app-card pc-table-wrap">
-          <table className="pc-table" style={{ minWidth: '40rem' }}>
-            <thead><tr><th>День</th><th className="num">На начало</th><th className="num">Приход</th><th className="num">Расход</th><th className="num">Перемещения</th><th className="num">На конец</th></tr></thead>
-            <tbody>
-              {data.days.map((r) => (
-                <tr key={r.date} style={{ cursor: 'default' }}>
-                  <td>{dayShort(r.date)}</td>
-                  <td className="num">{money(r.opening)}</td>
-                  <td className="num">{r.income ? money(r.income) : '—'}</td>
-                  <td className="num">{r.expense ? money(r.expense) : '—'}</td>
-                  <td className="num">{r.collection ? money(r.collection) : '—'}</td>
-                  <td className="num"><b>{money(r.closing)}</b></td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </section>
     </div>
   );
 }
@@ -1149,7 +1076,6 @@ function Cabinet() {
             {tab === 'handover' && <Handover tick={tick} people={people} notes={notes} reloadNotes={loadNotes} onOpenOrder={openRow} />}
             {tab === 'cash' && <Cash tick={tick} />}
             {tab === 'accepted' && <Accepted tick={tick} onOpen={openRow} />}
-            {tab === 'logistics' && <Logistics tick={tick} />}
             {tab === 'schedule' && <Schedule tick={tick} />}
             {tab === 'clients' && <Clients onOpenDoc={openDoc} />}
             {tab === 'kb' && <Knowledge />}

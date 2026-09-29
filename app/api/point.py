@@ -190,18 +190,12 @@ def create_point_router() -> APIRouter:
         except orders.OrderNotFound as exc:
             raise HTTPException(404, str(exc))
 
-    # ── приём, логистика, график ──────────────────────────────────────
+    # ── приём и график ────────────────────────────────────────────────
     @router.get("/accepted")
     async def accepted(dev=Depends(point_device)):
         from app.services import point_service
 
         return await _run(point_service.accepted_today, dev[1])
-
-    @router.get("/logistics")
-    async def logistics(dev=Depends(point_device)):
-        from app.services import point_service
-
-        return await _run(point_service.logistics, dev[1])
 
     @router.get("/schedule")
     async def schedule(dev=Depends(point_device)):

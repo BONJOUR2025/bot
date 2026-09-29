@@ -458,7 +458,7 @@ export function OrderView({ orderId, onBack, backLabel = 'Назад к цеху
                         Поделена: {s.split.parts.map((p) => `${p.name} ${p.percent ?? Math.round(p.share * 100)}%`).join(' · ')}
                       </p>
                     )}
-                    {s.moves.length > 0 && (
+                    {isWorkshop && s.moves.length > 0 && (
                       <p className="ws-sub">Накладные: {s.moves.map((m) => `${day(m.date)} ${m.from} → ${m.to} (${m.status})`).join('; ')}</p>
                     )}
                     {isWorkshop && s.barcode && s.workshop_work && s.status_id !== 7 && (
