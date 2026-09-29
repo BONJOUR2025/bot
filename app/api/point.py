@@ -33,6 +33,19 @@ class CallIn(BaseModel):
     note: str = ""
 
 
+class HandoverIn(BaseModel):
+    by: str
+    cash_counted: float | None = None
+    checklist: list[str] = []
+    notes: str = ""
+
+
+class HandoverAcceptIn(BaseModel):
+    by: str
+    cash_counted: float | None = None
+    comment: str = ""
+
+
 def _salon(salon_id: str):
     from app.data.salon_repository import get_salon_repository
 
@@ -179,6 +192,49 @@ def create_point_router() -> APIRouter:
         from app.services import point_service
 
         return await point_service.week_schedule(dev[1])
+
+    # ── касса и передача смены ────────────────────────────────────────
+    @router.get("/cash")
+    async def cash(dev=Depends(point_device)):
+        from app.services import point_service
+
+        return await _run(point_service.cash, dev[1])
+
+    @router.get("/handover")
+    async def handovers(dev=Depends(point_device)):
+        from app.data.point_device_repository import PointHandoverRepository
+
+        return PointHandoverRepository().list(dev[1].id)
+
+    @router.post("/handover")
+    async def handover_add(data: HandoverIn, dev=Depends(point_device)):
+        from app.data.point_device_repository import PointHandoverRepository
+        from app.services import point_service
+
+        device, salon = dev
+        if len(data.by.strip()) < 2:
+            raise HTTPException(400, "Укажите, кто сдаёт смену.")
+        # Остаток по Агбису на момент сдачи — чтобы потом было с чем сверить
+        # пересчёт. Агбис занят — запишем без него, журнал важнее.
+        agbis = None
+        try:
+            agbis = (await _run(point_service.cash, salon, 1)).get("balance")
+        except Exception:
+            pass
+        return PointHandoverRepository().add(salon.id, device["id"], by=data.by, cash_counted=data.cash_counted,
+                                             cash_agbis=agbis, checklist=data.checklist, notes=data.notes)
+
+    @router.post("/handover/{rec_id}/accept")
+    async def handover_accept(rec_id: str, data: HandoverAcceptIn, dev=Depends(point_device)):
+        from app.data.point_device_repository import PointHandoverRepository
+
+        if len(data.by.strip()) < 2:
+            raise HTTPException(400, "Укажите, кто принимает смену.")
+        rec = PointHandoverRepository().accept(dev[1].id, rec_id, by=data.by, cash_counted=data.cash_counted,
+                                               comment=data.comment)
+        if rec is None:
+            raise HTTPException(404, "Запись не найдена.")
+        return rec
 
     # ── клиенты: поиск, история, пароль от личного кабинета ───────────
     @router.get("/clients/search")

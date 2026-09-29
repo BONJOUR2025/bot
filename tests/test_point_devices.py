@@ -29,3 +29,20 @@ def test_calls_keep_last(tmp_path):
     calls.add(10, "reached", "придёт завтра", "s", "d")
     last = calls.last_for([10, 11])
     assert last[10]["result"] == "reached" and last[10]["count"] == 2 and 11 not in last
+
+
+def test_handover_add_accept_and_scope(tmp_path):
+    from app.data.point_device_repository import PointHandoverRepository
+
+    repo = PointHandoverRepository(str(tmp_path / "h.json"))
+    rec = repo.add("s1", "d1", by="Иванова", cash_counted="1 000", cash_agbis=1000.4,
+                   checklist=["Касса пересчитана"], notes="  пакеты кончились ")
+    assert rec["cash_counted"] is None  # строку с пробелом не угадываем — фронт шлёт число
+    rec = repo.add("s1", "d1", by="Иванова", cash_counted=1000, cash_agbis=1000.4, checklist=[], notes="x")
+    assert repo.list("s1")[0]["id"] == rec["id"]
+    assert repo.list("s2") == []
+    assert repo.accept("s2", rec["id"], by="Петрова", cash_counted=None, comment="") is None
+    done = repo.accept("s1", rec["id"], by="Петрова", cash_counted=990, comment="нет 10 ₽")
+    assert done["accepted"]["by"] == "Петрова" and done["accepted"]["cash_counted"] == 990
+    again = repo.accept("s1", rec["id"], by="Сидорова", cash_counted=1, comment="")
+    assert again["accepted"]["by"] == "Петрова"

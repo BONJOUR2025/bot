@@ -163,6 +163,42 @@ def shift(salon) -> dict[str, Any]:
     return {"opened": bool(people), "people": people}
 
 
+# ── касса точки ─────────────────────────────────────────────────────
+# Касса Агбиса по коду салона. По имени не сопоставить: «4_Академическая» —
+# это ТЦ «Академ Парк», а у Бестужевской в «Салонах» приписка «(Цех)».
+POINT_KASSA_BY_CODE = {"Оз": 21057, "М": 10969, "Ц": 21067, "А": 10564, "Гп": 21066, "Ох": 1172}
+CASH_DAYS = 14
+
+
+def point_kassa(salon) -> int | None:
+    return POINT_KASSA_BY_CODE.get((getattr(salon, "code", "") or "").strip())
+
+
+def cash(salon, days: int = CASH_DAYS) -> dict[str, Any]:
+    """Касса точки за две недели: остаток на начало/конец дня и каждая
+    проводка — тот же отчёт, по которому сверяют пересчёт в «Кассе» админки.
+    Перемещения (инкассация в «Основную» и обратно) помечены отдельно:
+    это то, что уходит из ящика не продажей."""
+    from app.services import fdb_cache
+    from app.services.firebird_service import KASSA_BASIS_INKASSATION
+    from app.services.users import get_external_code_to_name_map
+
+    kassa_id = point_kassa(salon)
+    if kassa_id is None:
+        return {"kassa_id": None, "days": [], "entries": []}
+    today = date.today()
+    data = fdb_cache.get_or_compute("cash.daily_balances", (kassa_id, today - timedelta(days=days - 1), today))
+    names = get_external_code_to_name_map()
+    entries = []
+    for e in data.get("entries", []):
+        is_move = e.get("basis_id") == KASSA_BASIS_INKASSATION
+        entries.append({**e, "user_name": names.get(e.get("user_id") or "", e.get("user_id") or "—"),
+                        "kind": "move" if is_move else ("in" if (e.get("debet") or 0) > 0 else "out")})
+    entries.reverse()
+    return {"kassa_id": kassa_id, "kassa_name": data.get("kassa_name"), "balance": data.get("closing"),
+            "days": list(reversed(data.get("days", []))), "entries": entries}
+
+
 # ── приём сегодня и перемещения точка ↔ цех ─────────────────────────
 def accepted_today(salon) -> list[dict[str, Any]]:
     """Заказы, принятые на точке сегодня: что именно и на кого."""

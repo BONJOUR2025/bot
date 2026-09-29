@@ -1,4 +1,5 @@
-"""Кабинет точки: какие рабочие ПК к какой точке подключены, и отметки звонков.
+"""Кабинет точки: какие рабочие ПК к какой точке подключены, отметки звонков
+и журнал передачи смены.
 
 Подключение — одноразовым кодом: руководитель в «Салонах» выдаёт код, на ПК
 точки его вводят один раз, и браузер получает свой ключ. Храним только хэш
@@ -16,7 +17,7 @@ import secrets
 from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 
-from app.config import POINT_CALLS_FILE, POINT_DEVICES_FILE
+from app.config import POINT_CALLS_FILE, POINT_DEVICES_FILE, POINT_HANDOVERS_FILE
 
 CODE_TTL = timedelta(minutes=15)
 
@@ -151,3 +152,58 @@ class PointCallRepository:
             if recs:
                 out[oid] = {**recs[-1], "count": len(recs)}
         return out
+
+
+def _money_or_none(v) -> Optional[float]:
+    if v is None or v == "":
+        return None
+    try:
+        return round(float(v), 2)
+    except (TypeError, ValueError):
+        return None
+
+
+class PointHandoverRepository:
+    """Журнал передачи смены: кто сдал, что проверил, сколько насчитал в кассе
+    и что осталось на следующего. Принимающий подтверждает приём — своим
+    пересчётом и комментарием, если что-то не сошлось. В Агбисе такого нет.
+
+    Остаток кассы по Агбису на момент записи храним рядом с пересчётом: через
+    час Агбис покажет уже другую цифру, а сверять надо с той, что была."""
+
+    KEEP = 500  # записей на точку — хватает на год с лишним, файл не пухнет
+
+    def __init__(self, file_path: Optional[str] = None) -> None:
+        self._file = file_path or POINT_HANDOVERS_FILE
+
+    def list(self, salon_id: str, limit: int = 30) -> list[dict[str, Any]]:
+        rows = [r for r in _load(self._file, []) if r.get("salon_id") == salon_id]
+        return list(reversed(rows))[:limit]
+
+    def add(self, salon_id: str, device_id: str, *, by: str, cash_counted, cash_agbis,
+            checklist: list[str], notes: str) -> dict[str, Any]:
+        data = _load(self._file, [])
+        rec = {"id": secrets.token_hex(5), "salon_id": salon_id, "device_id": device_id,
+               "at": _now().isoformat(), "by": by.strip()[:80],
+               "cash_counted": _money_or_none(cash_counted), "cash_agbis": _money_or_none(cash_agbis),
+               "checklist": [str(x)[:80] for x in checklist][:12], "notes": (notes or "").strip()[:2000],
+               "accepted": None}
+        data.append(rec)
+        mine = [r for r in data if r.get("salon_id") == salon_id]
+        if len(mine) > self.KEEP:
+            drop = {id(r) for r in mine[:len(mine) - self.KEEP]}
+            data = [r for r in data if id(r) not in drop]
+        _save(self._file, data)
+        return rec
+
+    def accept(self, salon_id: str, rec_id: str, *, by: str, cash_counted, comment: str) -> Optional[dict[str, Any]]:
+        data = _load(self._file, [])
+        rec = next((r for r in data if r.get("id") == rec_id and r.get("salon_id") == salon_id), None)
+        if rec is None:
+            return None
+        if rec.get("accepted"):
+            return rec
+        rec["accepted"] = {"by": by.strip()[:80], "at": _now().isoformat(),
+                           "cash_counted": _money_or_none(cash_counted), "comment": (comment or "").strip()[:1000]}
+        _save(self._file, data)
+        return rec

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  AlarmClock, Archive, BookOpen, CalendarDays, ClipboardList, Inbox, KeyRound, MessageCircle,
-  Phone, PhoneOff, RefreshCw, ScanBarcode, Send, Sparkles, Truck, UserSearch, X,
+  AlarmClock, Archive, BookOpen, CalendarDays, ClipboardCheck, ClipboardList, Inbox, KeyRound, MessageCircle,
+  Phone, PhoneOff, RefreshCw, ScanBarcode, Send, Sparkles, Truck, UserSearch, Wallet, X,
 } from 'lucide-react';
 import api, { POINT_TOKEN_KEY } from '../api.js';
 import { OrderSearch, OrderView } from './employee/WorkshopOrder.jsx';
@@ -27,11 +27,13 @@ const SECTIONS = [
       { key: 'ready', label: 'Выдача', icon: Inbox, count: (l) => l.ready.length },
       { key: 'due', label: 'Сроки', icon: AlarmClock, count: (l) => l.due.length },
       { key: 'stale', label: 'Долго лежат', icon: Archive, count: (l) => l.stale.length },
+      { key: 'handover', label: 'Передача смены', icon: ClipboardCheck },
     ],
   },
   {
     name: 'Точка',
     items: [
+      { key: 'cash', label: 'Касса', icon: Wallet },
       { key: 'accepted', label: 'Принято сегодня', icon: Send },
       { key: 'logistics', label: 'Перемещения', icon: Truck },
       { key: 'schedule', label: 'График', icon: CalendarDays },
@@ -50,6 +52,8 @@ const TITLES = {
   ready: ['Смена', 'Готово к выдаче', 'Изделия готовы, клиент ещё не забрал. Сначала те, кому ещё не звонили.'],
   due: ['Смена', 'Сроки', 'Не готово, а срок выдачи сегодня или уже прошёл. Предупредите клиента до того, как он приедет.'],
   stale: ['Смена', 'Долго лежат', 'Готовы больше 14 дней назад и до сих пор не выданы. Напомните клиенту.'],
+  handover: ['Смена', 'Передача смены', 'Кто сдал смену, что проверил и сколько в кассе. Следующий администратор подтверждает приём своим пересчётом.'],
+  cash: ['Точка', 'Касса', 'Движение по кассе точки в Агбисе за две недели: перемещения в «Основную», приход и остаток на конец дня.'],
   accepted: ['Точка', 'Принято сегодня', 'Заказы, оформленные на точке за сегодня.'],
   logistics: ['Точка', 'Перемещения', 'Накладные между точкой и цехом за две недели: что едет к нам и что уехало.'],
   schedule: ['Точка', 'График на неделю', 'Кто работает на точке — по общему графику.'],
@@ -327,6 +331,263 @@ function Schedule({ tick }) {
         </div>
       ))}
       <p className="pc-hint" style={{ gridColumn: '1 / -1' }}>Если день пустой — в графике на него никто не поставлен или месяц ещё не заполнен.</p>
+    </div>
+  );
+}
+
+/* ── касса и передача смены ─────────────────────────────────────── */
+const CHECKLIST = [
+  'Касса пересчитана',
+  'Готовые заказы на полке сверены',
+  'Накладные из цеха разобраны',
+  'Ключи и сейф на месте',
+  'Терминал и принтер бирок работают',
+  'Зал и витрина в порядке',
+];
+const signed = (n) => `${n > 0 ? '+' : n < 0 ? '−' : ''}${money(Math.abs(n))}`;
+function Diff({ counted, agbis }) {
+  if (counted == null || agbis == null) return null;
+  const diff = Math.round((counted - agbis) * 100) / 100;
+  if (Math.abs(diff) < 1) return <span className="badge badge--success">сходится</span>;
+  return <span className="badge badge--error">{diff > 0 ? 'излишек' : 'недостача'} {money(Math.abs(diff))}</span>;
+}
+function dayShort(iso) {
+  const d = new Date(`${iso}T00:00:00`);
+  return Number.isNaN(d.getTime()) ? iso : d.toLocaleDateString('ru-RU', { weekday: 'short', day: 'numeric', month: 'short' });
+}
+
+function Cash({ tick }) {
+  const { data, loading, error } = useSection('/point/cash', true, tick);
+  const [mode, setMode] = useState('move');
+  if (loading && !data) return <p className="pc-muted">Загрузка…</p>;
+  if (error) return <p className="pc-error">{error}</p>;
+  if (!data?.kassa_id) return <div className="app-card p-6 text-sm text-[color:var(--color-muted-foreground)]">Касса этой точки не настроена — сообщите руководителю.</div>;
+  const today = data.days[0] || {};
+  const rows = data.entries.filter((e) => mode === 'all' || e.kind === 'move');
+  return (
+    <div className="space-y-5">
+      <div className="pc-kpis">
+        <StatCard icon={<Wallet size={18} />} label="В кассе по Агбису" value={money(data.balance)} sub={data.kassa_name} />
+        <StatCard icon={<Wallet size={18} />} label="Приход сегодня" value={money(today.income)} sub={`на начало дня ${money(today.opening)}`} />
+        <StatCard icon={<Truck size={18} />} label="Перемещения сегодня" value={money(today.collection)} sub="ушло в «Основную»" />
+        <StatCard icon={<Wallet size={18} />} label="Расход сегодня" value={money(today.expense)} sub="возвраты и прочее" />
+      </div>
+
+      <section className="space-y-2">
+        <div className="flex items-center gap-3 flex-wrap">
+          <h3 className="pc-h3">Проводки</h3>
+          <div className="pc-seg" role="group" aria-label="Какие проводки показать">
+            <button type="button" className={mode === 'move' ? 'is-on' : ''} onClick={() => setMode('move')}>Перемещения</button>
+            <button type="button" className={mode === 'all' ? 'is-on' : ''} onClick={() => setMode('all')}>Все</button>
+          </div>
+        </div>
+        {rows.length === 0
+          ? <div className="app-card p-6 text-sm text-[color:var(--color-muted-foreground)]">За две недели таких проводок нет.</div>
+          : (
+            <div className="app-card pc-table-wrap">
+              <table className="pc-table" style={{ minWidth: '46rem' }}>
+                <thead><tr><th>Когда</th><th>Документ</th><th>Основание</th><th>Кто</th><th className="num">Сумма</th></tr></thead>
+                <tbody>
+                  {rows.map((e) => {
+                    const amount = (e.debet || 0) - (e.kredit || 0);
+                    return (
+                      <tr key={e.id} style={{ cursor: 'default' }}>
+                        <td className="pc-num">{day(e.date)} {e.time}</td>
+                        <td className="pc-num">{e.doc_num}</td>
+                        <td>
+                          <div>{e.basis_text || e.basis_name}</div>
+                          <div className="pc-muted">{e.transfer_text || e.basis_name}</div>
+                        </td>
+                        <td>{e.user_name}</td>
+                        <td className={`num ${amount < 0 ? 'pc-neg' : 'pc-pos'}`}>{signed(amount)}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+      </section>
+
+      <section className="space-y-2">
+        <h3 className="pc-h3">По дням</h3>
+        <p className="pc-hint">Остаток на конец дня — с ним сверяют пересчёт при передаче смены.</p>
+        <div className="app-card pc-table-wrap">
+          <table className="pc-table" style={{ minWidth: '40rem' }}>
+            <thead><tr><th>День</th><th className="num">На начало</th><th className="num">Приход</th><th className="num">Расход</th><th className="num">Перемещения</th><th className="num">На конец</th></tr></thead>
+            <tbody>
+              {data.days.map((r) => (
+                <tr key={r.date} style={{ cursor: 'default' }}>
+                  <td>{dayShort(r.date)}</td>
+                  <td className="num">{money(r.opening)}</td>
+                  <td className="num">{r.income ? money(r.income) : '—'}</td>
+                  <td className="num">{r.expense ? money(r.expense) : '—'}</td>
+                  <td className="num">{r.collection ? money(r.collection) : '—'}</td>
+                  <td className="num"><b>{money(r.closing)}</b></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function NameInput({ id, value, onChange, people, placeholder }) {
+  return (
+    <>
+      <input id={id} className="input" list={`${id}-people`} value={value} onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder} maxLength={80} autoComplete="off" />
+      <datalist id={`${id}-people`}>{people.map((n) => <option key={n} value={n} />)}</datalist>
+    </>
+  );
+}
+const toNum = (v) => (String(v).trim() === '' ? null : Number(String(v).replace(/\s/g, '').replace(',', '.')));
+
+function AcceptForm({ rec, people, onDone }) {
+  const [by, setBy] = useState('');
+  const [cash, setCash] = useState('');
+  const [comment, setComment] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+  const submit = async (e) => {
+    e.preventDefault();
+    setBusy(true); setErr('');
+    try {
+      await api.post(`/point/handover/${rec.id}/accept`, { by, cash_counted: toNum(cash), comment });
+      onDone();
+    } catch (e2) { setErr(errText(e2, 'Не удалось сохранить.')); } finally { setBusy(false); }
+  };
+  return (
+    <form className="app-card p-5 space-y-3 pc-accept" onSubmit={submit}>
+      <div className="flex items-center gap-2 flex-wrap">
+        <b>Смену сдал(а) {rec.by} · {dayTime(rec.at)}</b>
+        <span className="badge badge--warning">ждёт приёма</span>
+      </div>
+      <div className="pc-muted">
+        В кассе насчитано {rec.cash_counted != null ? money(rec.cash_counted) : '—'}
+        {rec.cash_agbis != null ? ` · по Агбису ${money(rec.cash_agbis)}` : ''}
+        {' '}<Diff counted={rec.cash_counted} agbis={rec.cash_agbis} />
+      </div>
+      {rec.notes && <div className="pc-answer"><div className="pc-muted">Передаёт на смену</div><p style={{ whiteSpace: 'pre-wrap' }}>{rec.notes}</p></div>}
+      <div className="pc-form-grid">
+        <label htmlFor="acc-by">Кто принимает<NameInput id="acc-by" value={by} onChange={setBy} people={people} placeholder="Фамилия Имя" /></label>
+        <label htmlFor="acc-cash">Мой пересчёт кассы, ₽<input id="acc-cash" className="input" inputMode="decimal" value={cash} onChange={(e) => setCash(e.target.value)} placeholder="если пересчитали" /></label>
+      </div>
+      <label htmlFor="acc-comment" className="pc-field">Если что-то не сошлось — что именно
+        <textarea id="acc-comment" className="input" rows={2} value={comment} onChange={(e) => setComment(e.target.value)} maxLength={1000} />
+      </label>
+      {err && <p className="pc-error">{err}</p>}
+      <button type="submit" className="btn btn--primary" disabled={busy || by.trim().length < 2}>{busy ? 'Сохраняю…' : 'Смену принял(а)'}</button>
+    </form>
+  );
+}
+
+function Handover({ tick, people }) {
+  const [reload, setReload] = useState(0);
+  const { data, loading, error } = useSection('/point/handover', true, tick + reload);
+  const cashInfo = useSection('/point/cash', true, tick + reload);
+  const [by, setBy] = useState('');
+  const [cash, setCash] = useState('');
+  const [checks, setChecks] = useState([]);
+  const [notes, setNotes] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+  const [saved, setSaved] = useState(false);
+
+  const agbis = cashInfo.data?.balance;
+  const pending = (data || []).find((r) => !r.accepted);
+  const toggle = (item) => setChecks((c) => (c.includes(item) ? c.filter((x) => x !== item) : [...c, item]));
+  const submit = async (e) => {
+    e.preventDefault();
+    setBusy(true); setErr(''); setSaved(false);
+    try {
+      await api.post('/point/handover', { by, cash_counted: toNum(cash), checklist: checks, notes });
+      setCash(''); setChecks([]); setNotes(''); setSaved(true);
+      setReload((r) => r + 1);
+    } catch (e2) { setErr(errText(e2, 'Не удалось сохранить.')); } finally { setBusy(false); }
+  };
+
+  return (
+    <div className="space-y-5">
+      {pending && <AcceptForm key={pending.id} rec={pending} people={people} onDone={() => setReload((r) => r + 1)} />}
+
+      <form className="app-card p-5 space-y-4" onSubmit={submit}>
+        <h3 className="pc-h3">Сдать смену</h3>
+        <div className="pc-form-grid">
+          <label htmlFor="ho-by">Кто сдаёт<NameInput id="ho-by" value={by} onChange={setBy} people={people} placeholder="Фамилия Имя" /></label>
+          <label htmlFor="ho-cash">Пересчёт кассы, ₽
+            <input id="ho-cash" className="input" inputMode="decimal" value={cash} onChange={(e) => setCash(e.target.value)} placeholder="0" />
+          </label>
+        </div>
+        <div className="pc-muted">
+          По Агбису сейчас: <b>{agbis != null ? money(agbis) : cashInfo.loading ? '…' : '—'}</b>
+          {' '}<Diff counted={toNum(cash)} agbis={agbis} />
+        </div>
+        <fieldset className="pc-checks">
+          <legend className="pc-muted">Проверено перед уходом</legend>
+          {CHECKLIST.map((item) => (
+            <label key={item} className="pc-check">
+              <input type="checkbox" checked={checks.includes(item)} onChange={() => toggle(item)} />
+              <span>{item}</span>
+            </label>
+          ))}
+        </fieldset>
+        <label htmlFor="ho-notes" className="pc-field">Что передать следующей смене
+          <textarea id="ho-notes" className="input" rows={3} value={notes} onChange={(e) => setNotes(e.target.value)} maxLength={2000}
+            placeholder="Клиент придёт за сапогами к 12, перезвонить по заказу 22585-8, кончились пакеты…" />
+        </label>
+        {err && <p className="pc-error">{err}</p>}
+        {saved && <p className="pc-ok">Записано. Следующий администратор увидит запись и подтвердит приём.</p>}
+        <button type="submit" className="btn btn--primary" disabled={busy || by.trim().length < 2}>{busy ? 'Сохраняю…' : 'Смену сдал(а)'}</button>
+      </form>
+
+      <section className="space-y-2">
+        <h3 className="pc-h3">Журнал</h3>
+        {loading && !data && <p className="pc-muted">Загрузка…</p>}
+        {error && <p className="pc-error">{error}</p>}
+        {data && data.length === 0 && <div className="app-card p-6 text-sm text-[color:var(--color-muted-foreground)]">Записей пока нет.</div>}
+        {data && data.length > 0 && (
+          <div className="app-card pc-table-wrap">
+            <table className="pc-table" style={{ minWidth: '52rem' }}>
+              <thead><tr><th>Сдал(а)</th><th>Касса</th><th>Проверено</th><th>Передано</th><th>Принял(а)</th></tr></thead>
+              <tbody>
+                {data.map((r) => (
+                  <tr key={r.id} style={{ cursor: 'default' }} className={r.accepted ? '' : 'is-pending'}>
+                    <td><div><b>{r.by}</b></div><div className="pc-muted">{dayTime(r.at)}</div></td>
+                    <td>
+                      <div className="pc-num">{r.cash_counted != null ? money(r.cash_counted) : '—'}</div>
+                      {r.cash_agbis != null && <div className="pc-muted">Агбис {money(r.cash_agbis)}</div>}
+                      <Diff counted={r.cash_counted} agbis={r.cash_agbis} />
+                    </td>
+                    <td><span className={`badge ${r.checklist.length === CHECKLIST.length ? 'badge--success' : 'badge--neutral'}`}>{r.checklist.length} из {CHECKLIST.length}</span>
+                      {r.checklist.length < CHECKLIST.length && (
+                        <div className="pc-muted">нет: {CHECKLIST.filter((x) => !r.checklist.includes(x)).join(', ').toLowerCase()}</div>
+                      )}
+                    </td>
+                    <td style={{ whiteSpace: 'pre-wrap', maxWidth: '22rem' }}>{r.notes || <span className="pc-muted">—</span>}</td>
+                    <td>
+                      {r.accepted ? (
+                        <>
+                          <div><b>{r.accepted.by}</b></div>
+                          <div className="pc-muted">{dayTime(r.accepted.at)}</div>
+                          {r.accepted.cash_counted != null && (
+                            <div className="pc-muted">пересчёт {money(r.accepted.cash_counted)}{' '}
+                              <Diff counted={r.accepted.cash_counted} agbis={r.cash_counted ?? r.cash_agbis} />
+                            </div>
+                          )}
+                          {r.accepted.comment && <div className="pc-warn-text">{r.accepted.comment}</div>}
+                        </>
+                      ) : <span className="badge badge--warning">не принята</span>}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
     </div>
   );
 }
@@ -655,6 +916,8 @@ function Cabinet() {
               </>
             )}
             {d && tab === 'stale' && <OrdersTable rows={lists.stale} kind="ready" onOpen={openRow} onMarked={() => load()} empty="Таких заказов нет." />}
+            {tab === 'handover' && <Handover tick={tick} people={(shift?.people || []).map((p) => p.name)} />}
+            {tab === 'cash' && <Cash tick={tick} />}
             {tab === 'accepted' && <Accepted tick={tick} onOpen={openRow} />}
             {tab === 'logistics' && <Logistics tick={tick} />}
             {tab === 'schedule' && <Schedule tick={tick} />}

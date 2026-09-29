@@ -72,6 +72,7 @@ MDM_DEVICES_FILE = settings.mdm_devices_file
 WORKSTATIONS_FILE = settings.workstations_file
 POINT_DEVICES_FILE = settings.point_devices_file
 POINT_CALLS_FILE = settings.point_calls_file
+POINT_HANDOVERS_FILE = settings.point_handovers_file
 MDM_AGENT_APK_FILE = settings.mdm_agent_apk_file
 MDM_APPS_DIR = settings.mdm_apps_dir
 MDM_SNAPSHOTS_DIR = settings.mdm_snapshots_dir
