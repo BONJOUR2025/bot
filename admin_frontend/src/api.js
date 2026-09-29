@@ -73,6 +73,11 @@ api.interceptors.response.use(
       window.dispatchEvent(new CustomEvent('point-unauthorized'));
       return Promise.reject(error);
     }
+    // Кабинет точки живёт без входа сотрудника: 401 на проверке профиля
+    // (auth/me при загрузке приложения) не должен уводить его на страницу входа.
+    if (error.response?.status === 401 && window.location.pathname.startsWith('/admin/point')) {
+      return Promise.reject(error);
+    }
     if (error.response?.status === 401) {
       localStorage.removeItem('auth_token');
       const path = window.location.pathname;
