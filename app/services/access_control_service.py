@@ -179,6 +179,10 @@ def short_person_name(full_name: str) -> str:
     return f"{parts[0]} {parts[1][0].upper()}."
 
 
+# Самостоятельная смена пароля в приложении: короче — легко подобрать.
+MIN_PASSWORD_LENGTH = 6
+
+
 class AccessControlService:
     """Manage access control configuration stored in JSON."""
 
@@ -630,6 +634,7 @@ class AccessControlService:
             self._check_privilege_escalation(
                 actor, self._resolve_permissions(user_record, role)
             )
+            self._remember_password(user_record, password, by="admin")
             self._data.setdefault("users", []).append(user_record)
             self._persist()
             return user_record
@@ -664,11 +669,12 @@ class AccessControlService:
                 user["allowed_departments"] = self._validate_departments(
                     data.get("allowed_departments")
                 )
-            if data.get("password"):
-                user["salt"], user["password_hash"] = self._hash_password(data["password"])
             if "employee_id" in data:
                 raw_emp = data.get("employee_id")
                 user["employee_id"] = str(raw_emp) if raw_emp else None
+            if data.get("password"):
+                user["salt"], user["password_hash"] = self._hash_password(data["password"])
+                self._remember_password(user, data["password"], by="admin")
             role = self._get_role(user.get("role_id"))
             self._check_privilege_escalation(actor, self._resolve_permissions(user, role))
             self._persist()
@@ -715,7 +721,70 @@ class AccessControlService:
         _, computed = self._hash_password(password, salt=salt)
         if not hmac.compare_digest(computed, password_hash):
             return None
+        # Пароли, заданные до появления просмотра, известны только хэшем —
+        # копию запоминаем при первом удачном входе сотрудника.
+        if user_record.get("employee_id") and not user_record.get("password_enc"):
+            with self._lock:
+                self._reload()
+                fresh = self._get_user(user_record.get("id"))
+                if fresh and not fresh.get("password_enc"):
+                    self._remember_password(fresh, password, by="login")
+                    self._persist()
         return self.resolve_user(user_record.get("id"))
+
+    # ------------------------------------------------------------------
+    # копия пароля сотрудника: смена самим сотрудником и просмотр в админке
+    # ------------------------------------------------------------------
+    @staticmethod
+    def _remember_password(user: dict[str, Any], password: str, by: str) -> None:
+        """Обратимая копия — только у учёток, привязанных к сотруднику.
+        Учётки руководителей без сотрудника не расшифровываются никогда."""
+        from datetime import datetime, timezone
+
+        if not user.get("employee_id"):
+            user.pop("password_enc", None)
+            return
+        from app.services import password_vault
+
+        user["password_enc"] = password_vault.encrypt(password)
+        user["password_set_at"] = datetime.now(timezone.utc).isoformat()
+        user["password_set_by"] = by
+
+    def change_own_password(self, user_id: str, old_password: str, new_password: str) -> None:
+        with self._lock:
+            self._reload()
+            user = self._get_user(user_id)
+            if not user or not user.get("password_hash"):
+                raise ValueError("user_not_found")
+            _, computed = self._hash_password(old_password or "", salt=user.get("salt"))
+            if not hmac.compare_digest(computed, user["password_hash"]):
+                raise ValueError("wrong_password")
+            new_password = new_password or ""
+            if len(new_password) < MIN_PASSWORD_LENGTH:
+                raise ValueError("password_too_short")
+            if new_password == old_password:
+                raise ValueError("password_same")
+            if new_password.strip().lower() == str(user.get("login") or "").strip().lower():
+                raise ValueError("password_is_login")
+            user["salt"], user["password_hash"] = self._hash_password(new_password)
+            self._remember_password(user, new_password, by="self")
+            self._persist()
+
+    def reveal_password(self, user_id: str) -> dict[str, Any]:
+        from app.services import password_vault
+
+        self._reload()
+        user = self._get_user(user_id)
+        if not user:
+            raise ValueError("user_not_found")
+        if not user.get("employee_id"):
+            raise ValueError("not_employee_account")
+        return {
+            "login": user.get("login"),
+            "password": password_vault.decrypt(user.get("password_enc")),
+            "set_at": user.get("password_set_at"),
+            "set_by": user.get("password_set_by"),
+        }
 
     def issue_token(self, user_id: str) -> str:
         now = int(time.time())

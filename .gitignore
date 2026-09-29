@@ -173,3 +173,6 @@ config.json
 
 .claude/
 .gstack/
+
+# ключ копий паролей сотрудников (password_vault) — только в продакшне
+employee_passwords.key

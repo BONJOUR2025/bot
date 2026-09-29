@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Cookie, Depends, HTTPException, Response, status
+from pydantic import BaseModel
 
 from app.schemas.auth import (
     AccessConfigResponse,
@@ -34,7 +35,18 @@ ERROR_MAP = {
     "user_not_found": (status.HTTP_404_NOT_FOUND, "user_not_found"),
     "login_password_required": (status.HTTP_400_BAD_REQUEST, "login_password_required"),
     "privilege_escalation": (status.HTTP_403_FORBIDDEN, "privilege_escalation"),
+    "wrong_password": (status.HTTP_400_BAD_REQUEST, "Текущий пароль введён неверно."),
+    "password_too_short": (status.HTTP_400_BAD_REQUEST, "Новый пароль — не короче 6 символов."),
+    "password_same": (status.HTTP_400_BAD_REQUEST, "Новый пароль совпадает со старым."),
+    "password_is_login": (status.HTTP_400_BAD_REQUEST, "Пароль не должен совпадать с логином."),
+    "not_employee_account": (status.HTTP_400_BAD_REQUEST,
+                             "Пароль можно посмотреть только у учётки сотрудника."),
 }
+
+
+class PasswordChange(BaseModel):
+    old_password: str
+    new_password: str
 
 
 def _to_auth_user(resolved: ResolvedUser) -> AuthUser:
@@ -214,6 +226,32 @@ def create_auth_router(service: AccessControlService | None = None) -> APIRouter
             "resolved_departments": record.get("allowed_departments") or [],
             "employee_id": resolved.employee_id,
         })
+
+    @router.post("/me/password")
+    async def change_my_password(
+        payload: PasswordChange,
+        user: ResolvedUser = Depends(get_current_user),
+    ) -> dict[str, str]:
+        """Сотрудник меняет свой пароль в «Профиле» приложения."""
+        try:
+            service.change_own_password(user.id, payload.old_password, payload.new_password)
+        except ValueError as exc:
+            _handle_error(exc)
+        log_connection(f"Смена пароля самим сотрудником: {user.login} ({user.display_name})")
+        return {"status": "ok"}
+
+    @router.get("/users/{user_id}/password")
+    async def reveal_password(
+        user_id: str,
+        user: ResolvedUser = Depends(require_permission("access")),
+    ) -> dict:
+        """Текущий пароль учётки сотрудника — каждый просмотр пишется в журнал."""
+        try:
+            data = service.reveal_password(user_id)
+        except ValueError as exc:
+            _handle_error(exc)
+        log_connection(f"Просмотр пароля учётки {data.get('login')} — {user.login} ({user.display_name})")
+        return data
 
     @router.delete("/users/{user_id}")
     async def delete_user(

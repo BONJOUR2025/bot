@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef } from 'react';
-import { Bell, BellOff, Pencil, Check, X, Camera } from 'lucide-react';
+import { Bell, BellOff, Pencil, Check, X, Camera, Eye, EyeOff, KeyRound } from 'lucide-react';
 import { useAuth } from '../../providers/AuthProvider.jsx';
 import api from '../../api.js';
 import { useToast } from '../../providers/ToastProvider.jsx';
@@ -12,6 +12,66 @@ function Row({ label, value }) {
     <div className="emp-profile-row">
       <span className="emp-profile-row__label">{label}</span>
       <span className="emp-profile-row__value">{value}</span>
+    </div>
+  );
+}
+
+/** Смена своего пароля входа в приложение. Сессия при этом не сбрасывается:
+ *  вход держится на токене, новый пароль нужен при следующем входе. */
+function ChangePassword({ login }) {
+  const [open, setOpen] = useState(false);
+  const [form, setForm] = useState({ old: '', next: '', repeat: '' });
+  const [show, setShow] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const [done, setDone] = useState(false);
+
+  const mismatch = form.repeat && form.next !== form.repeat;
+  const ready = form.old && form.next.length >= 6 && form.next === form.repeat;
+  const submit = async (e) => {
+    e.preventDefault();
+    setBusy(true); setError('');
+    try {
+      await api.post('/auth/me/password', { old_password: form.old, new_password: form.next });
+      setDone(true); setOpen(false); setForm({ old: '', next: '', repeat: '' });
+    } catch (err) {
+      const d = err?.response?.data?.detail;
+      setError(typeof d === 'string' ? d : 'Не удалось сменить пароль.');
+    } finally { setBusy(false); }
+  };
+  const field = (key, label, auto) => (
+    <label className="emp-pw__field">
+      <span>{label}</span>
+      <input className="input" type={show ? 'text' : 'password'} autoComplete={auto} value={form[key]}
+        onChange={(e) => setForm((f) => ({ ...f, [key]: e.target.value }))} />
+    </label>
+  );
+
+  return (
+    <div className="emp-profile-section">
+      <div className="emp-profile-section__title">Вход в приложение</div>
+      <Row label="Логин" value={login} />
+      {done && <p className="emp-pw__ok">Пароль изменён. Входите с новым паролем в следующий раз.</p>}
+      {!open ? (
+        <button type="button" className="btn btn--secondary btn--sm emp-pw__open" onClick={() => { setOpen(true); setDone(false); }}>
+          <KeyRound size={15} /> Сменить пароль
+        </button>
+      ) : (
+        <form className="emp-pw" onSubmit={submit}>
+          {field('old', 'Текущий пароль', 'current-password')}
+          {field('next', 'Новый пароль — не короче 6 символов', 'new-password')}
+          {field('repeat', 'Новый пароль ещё раз', 'new-password')}
+          {mismatch && <p className="emp-page__error">Пароли не совпадают.</p>}
+          {error && <p className="emp-page__error">{error}</p>}
+          <button type="button" className="emp-pw__show" onClick={() => setShow((v) => !v)}>
+            {show ? <EyeOff size={14} /> : <Eye size={14} />} {show ? 'Скрыть пароли' : 'Показать пароли'}
+          </button>
+          <div className="emp-pw__actions">
+            <button type="button" className="btn btn--secondary btn--sm" onClick={() => { setOpen(false); setError(''); }}>Отмена</button>
+            <button type="submit" className="btn btn--primary btn--sm" disabled={!ready || busy}>{busy ? 'Сохраняю…' : 'Сохранить'}</button>
+          </div>
+        </form>
+      )}
     </div>
   );
 }
@@ -189,6 +249,8 @@ export default function EmployeeProfile() {
             <div className="emp-profile-section__title">Контакты</div>
             <EditableRow label="Телефон" value={employee.phone} onSave={(v) => saveField('phone', v)} />
           </div>
+
+          {user?.is_master && user?.login && <ChangePassword login={user.login} />}
 
           <div className="emp-profile-section">
             <div className="emp-profile-section__title">Реквизиты</div>

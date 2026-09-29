@@ -75,6 +75,7 @@ POINT_CALLS_FILE = settings.point_calls_file
 POINT_HANDOVERS_FILE = settings.point_handovers_file
 POINT_NOTES_FILE = settings.point_notes_file
 SERVICE_SPLITS_FILE = settings.service_splits_file
+EMPLOYEE_PASSWORD_KEY_FILE = settings.employee_password_key_file
 MDM_AGENT_APK_FILE = settings.mdm_agent_apk_file
 MDM_APPS_DIR = settings.mdm_apps_dir
 MDM_SNAPSHOTS_DIR = settings.mdm_snapshots_dir

@@ -8085,3 +8085,12 @@ button:hover > .vac-desc { color: var(--color-text); }
 .wo-split__total.is-bad { color: var(--color-danger); }
 .wo-split-note { display: flex; align-items: center; gap: 6px; margin: 0.4rem 0 0; font-size: 0.82rem; font-weight: 500; color: var(--color-primary); }
 @media (max-width: 480px) { .wo-split__row { grid-template-columns: minmax(0, 1fr) 4.8rem auto; } .wo-split__sum { display: none; } }
+
+/* Профиль: смена пароля входа. */
+.emp-pw { display: flex; flex-direction: column; gap: 10px; margin-top: 6px; }
+.emp-pw__field { display: flex; flex-direction: column; gap: 4px; font-size: 0.8rem; color: var(--color-text-muted); }
+.emp-pw__field .input { width: 100%; }
+.emp-pw__show { align-self: flex-start; display: inline-flex; align-items: center; gap: 6px; border: 0; background: none; padding: 0; font: inherit; font-size: 0.8rem; color: var(--color-primary); cursor: pointer; }
+.emp-pw__actions { display: flex; justify-content: flex-end; gap: 8px; }
+.emp-pw__open { margin-top: 8px; display: inline-flex; align-items: center; gap: 6px; }
+.emp-pw__ok { margin: 6px 0 0; font-size: 0.85rem; color: var(--color-success); }

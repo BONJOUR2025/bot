@@ -22,6 +22,40 @@ const emptyUser = {
   hadLogin: false,
 };
 
+/** Текущий пароль учётки сотрудника: по кнопке, каждый просмотр — в журнал.
+ *  Пароли, заданные до появления просмотра, известны только после
+ *  следующего входа сотрудника (до этого хранится лишь хэш). */
+function PasswordReveal({ userId }) {
+  const [state, setState] = useState(null);
+  const reveal = async () => {
+    setState({ loading: true });
+    try {
+      const r = await api.get(`/auth/users/${userId}/password`);
+      setState(r.data);
+    } catch (e) {
+      const d = e?.response?.data?.detail;
+      setState({ error: typeof d === 'string' ? d : 'Не удалось получить пароль.' });
+    }
+  };
+  if (!state) {
+    return <button type="button" className="text-sm underline text-[color:var(--color-primary)]" onClick={reveal}>Показать пароль</button>;
+  }
+  if (state.loading) return <span className="text-sm">…</span>;
+  if (state.error) return <span className="text-sm text-[color:var(--color-danger)]">{state.error}</span>;
+  if (!state.password) {
+    return <span className="text-sm text-[color:var(--color-text-muted)]">неизвестен — задан раньше; появится после следующего входа сотрудника или задайте новый</span>;
+  }
+  const by = { admin: 'задан в админке', self: 'сменён сотрудником', login: 'запомнен при входе' }[state.set_by] || '';
+  const at = state.set_at ? new Date(state.set_at).toLocaleString('ru-RU', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : '';
+  return (
+    <span className="text-sm inline-flex flex-wrap items-center gap-2">
+      <code className="px-2 py-0.5 rounded bg-[color:var(--color-control-bg)] font-semibold tracking-wide select-all">{state.password}</code>
+      <span className="text-[color:var(--color-text-muted)]">{[by, at].filter(Boolean).join(' · ')}</span>
+      <button type="button" className="underline text-[color:var(--color-text-muted)]" onClick={() => setState(null)}>скрыть</button>
+    </span>
+  );
+}
+
 export default function AccessControl() {
   const { isMobile } = useViewport();
   const { toast } = useToast();
@@ -503,6 +537,9 @@ export default function AccessControl() {
                   {user.employee_id && (
                     <div className="flex justify-between"><span className="text-[color:var(--color-text-muted)]">Личный кабинет</span><span>сотрудник #{user.employee_id}</span></div>
                   )}
+                  {user.employee_id && user.has_login && (
+                    <div className="flex justify-between gap-3"><span className="text-[color:var(--color-text-muted)]">Пароль</span><span className="text-right"><PasswordReveal userId={user.id} /></span></div>
+                  )}
                   <div className="flex justify-between"><span className="text-[color:var(--color-text-muted)]">VK</span><span>{user.vk_id ? '✅ привязан' : '— не привязан'}</span></div>
                 </div>
                 <div className="px-4 py-2 border-t flex justify-end gap-3">
@@ -554,6 +591,11 @@ export default function AccessControl() {
                     {user.employee_id && (
                       <p className="text-sm">
                         Личный кабинет: сотрудник #{user.employee_id}
+                      </p>
+                    )}
+                    {user.employee_id && user.has_login && (
+                      <p className="text-sm">
+                        Пароль: <PasswordReveal userId={user.id} />
                       </p>
                     )}
                     <p className="text-sm">
