@@ -555,18 +555,18 @@ function Handover({ tick, people }) {
               <tbody>
                 {data.map((r) => (
                   <tr key={r.id} style={{ cursor: 'default' }} className={r.accepted ? '' : 'is-pending'}>
-                    <td><div><b>{r.by}</b></div><div className="pc-muted">{dayTime(r.at)}</div></td>
+                    <td style={{ whiteSpace: 'nowrap' }}><div><b>{r.by}</b></div><div className="pc-muted">{dayTime(r.at)}</div></td>
                     <td>
                       <div className="pc-num">{r.cash_counted != null ? money(r.cash_counted) : '—'}</div>
                       {r.cash_agbis != null && <div className="pc-muted">Агбис {money(r.cash_agbis)}</div>}
                       <Diff counted={r.cash_counted} agbis={r.cash_agbis} />
                     </td>
-                    <td><span className={`badge ${r.checklist.length === CHECKLIST.length ? 'badge--success' : 'badge--neutral'}`}>{r.checklist.length} из {CHECKLIST.length}</span>
+                    <td style={{ maxWidth: '15rem' }}><span className={`badge ${r.checklist.length === CHECKLIST.length ? 'badge--success' : 'badge--neutral'}`}>{r.checklist.length} из {CHECKLIST.length}</span>
                       {r.checklist.length < CHECKLIST.length && (
                         <div className="pc-muted">нет: {CHECKLIST.filter((x) => !r.checklist.includes(x)).join(', ').toLowerCase()}</div>
                       )}
                     </td>
-                    <td style={{ whiteSpace: 'pre-wrap', maxWidth: '22rem' }}>{r.notes || <span className="pc-muted">—</span>}</td>
+                    <td style={{ whiteSpace: 'pre-wrap', minWidth: '16rem' }}>{r.notes || <span className="pc-muted">—</span>}</td>
                     <td>
                       {r.accepted ? (
                         <>
