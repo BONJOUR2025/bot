@@ -225,6 +225,14 @@ def create_point_router() -> APIRouter:
             answer = await asyncio.to_thread(point_service.kb_ask, q[:1000], dev[1].name)
         except RuntimeError as exc:
             raise HTTPException(503, str(exc))
+        except Exception as exc:
+            import logging
+
+            logging.getLogger(__name__).warning("Помощник кабинета точки: %s", exc)
+            text = str(exc)
+            if "402" in text or "INSUFFICIENT_BALANCE" in text:
+                raise HTTPException(503, "Закончился баланс нейросети — сообщите руководителю. Документы ниже доступны.")
+            raise HTTPException(503, "Помощник сейчас недоступен. Посмотрите ответ в документах ниже.")
         return {"answer": answer}
 
     @router.get("/photos/{photo_id}/full")
