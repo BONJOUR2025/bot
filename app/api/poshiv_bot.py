@@ -26,6 +26,10 @@ from pydantic import BaseModel
 from .dependencies import require_permission
 
 SETTINGS_FILENAME = "poshiv_settings.json"
+# Бот запоминает «username → Telegram ID», как только человек ему пишет
+# (config.remember_user у бота): по username сам Telegram написать не даёт.
+KNOWN_USERS_FILENAME = "known_users.json"
+USERNAME_RE = re.compile(r"@?([A-Za-z0-9_]{4,32})")
 TOKENS_FILENAME = "amo_tokens.json"
 CONFIG_FILENAME = "config.py"
 # Своего лог-файла у бота нет — stderr забирает pm2, отсюда и читаем.
@@ -152,11 +156,47 @@ def _log_tail(limit: int = 40) -> list[str]:
     return out
 
 
+def _norm_person(value: Any) -> int | str | None:
+    """Telegram ID → int, username → «@name» (в нижнем регистре: в Telegram
+    регистр username не важен). Пусто → None. Мусор → ValueError с текстом
+    для оператора."""
+    if value is None:
+        return None
+    if isinstance(value, int):
+        if value <= 0:
+            raise ValueError(f"{value} — не Telegram ID")
+        return value
+    s = str(value).strip()
+    if not s:
+        return None
+    if s.isdigit():
+        return int(s)
+    m = USERNAME_RE.fullmatch(s)
+    if not m:
+        raise ValueError(f"«{s}» — не Telegram ID и не @username")
+    return "@" + m.group(1).lower()
+
+
+def _known_users() -> dict[str, int]:
+    try:
+        data = json.loads((_bot_dir() / KNOWN_USERS_FILENAME).read_text(encoding="utf-8"))
+        return {str(k).lower(): int(v) for k, v in data.items()}
+    except Exception:
+        return {}
+
+
 class SettingsInput(BaseModel):
-    manager_ids: list[int] | None = None
-    masters: dict[str, int | None] | None = None
+    manager_ids: list[int | str] | None = None
+    masters: dict[str, int | str | None] | None = None
     check_time: str | None = None
     stage_next: dict[str, str | None] | None = None
+
+
+def _username_status(overlay: dict[str, Any]) -> dict[str, int | None]:
+    known = _known_users()
+    entries = list(overlay.get("manager_ids") or []) + list((overlay.get("masters") or {}).values())
+    return {e: known.get(e.lstrip("@").lower()) for e in entries
+            if isinstance(e, str) and e.startswith("@")}
 
 
 def create_poshiv_bot_router() -> APIRouter:
@@ -187,6 +227,9 @@ def create_poshiv_bot_router() -> APIRouter:
                 "stage_next": effective_next,
             },
             "defaults": defaults,
+            # username из настроек → ID, если бот его уже видел (иначе null):
+            # чтобы на странице было видно, кому ещё надо написать боту.
+            "usernames": _username_status(overlay),
         }
 
     @router.put("/settings")
@@ -203,9 +246,13 @@ def create_poshiv_bot_router() -> APIRouter:
             doc["check_time"] = payload.check_time
 
         if payload.manager_ids is not None:
-            if not payload.manager_ids:
+            try:
+                managers = [p for p in (_norm_person(x) for x in payload.manager_ids) if p]
+            except ValueError as e:
+                raise HTTPException(400, "Руководители: " + str(e))
+            if not managers:
                 raise HTTPException(400, "Список руководителей не может быть пустым")
-            doc["manager_ids"] = payload.manager_ids
+            doc["manager_ids"] = managers
 
         if payload.masters is not None:
             unknown = set(payload.masters) - stage_keys
@@ -216,7 +263,11 @@ def create_poshiv_bot_router() -> APIRouter:
             # Пустое значение = мастер не назначен. Этап продолжает работать,
             # просто без уведомления: несуществующий id раньше ронял отправку
             # и обрывал обработчик смены этапа уже после перевода сделки.
-            doc["masters"] = {k: v for k, v in payload.masters.items() if v}
+            try:
+                masters = {k: _norm_person(v) for k, v in payload.masters.items()}
+            except ValueError as e:
+                raise HTTPException(400, "Мастера: " + str(e))
+            doc["masters"] = {k: v for k, v in masters.items() if v}
 
         if payload.stage_next is not None:
             for src, dst in payload.stage_next.items():

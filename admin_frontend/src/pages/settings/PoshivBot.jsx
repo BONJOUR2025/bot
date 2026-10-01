@@ -7,6 +7,29 @@ import { Section, Field, StatusDot } from './shared.jsx';
 // Бот пошива живёт вне этого репозитория (рабочий стол) и деплоем не
 // обновляется. Отсюда мы только читаем его состояние и пишем оверлей
 // настроек — сам конфиг бота правится в его config.py.
+// Telegram ID → число, username → «@name»; пусто → null, мусор → undefined.
+function normPerson(raw) {
+  const s = String(raw ?? '').trim();
+  if (!s) return null;
+  if (/^\d+$/.test(s)) return Number(s);
+  const m = s.match(/^@?([A-Za-z0-9_]{4,32})$/);
+  return m ? `@${m[1].toLowerCase()}` : undefined;
+}
+
+/** Под username — к какому ID бот его привязал, или что человек ему ещё не писал. */
+function UsernameStatus({ value, usernames }) {
+  const s = String(value ?? '').trim();
+  if (!s || /^\d+$/.test(s)) return null;
+  const key = `@${s.replace(/^@/, '').toLowerCase()}`;
+  if (!(key in (usernames || {}))) {
+    return <span className="text-xs text-[color:var(--color-muted-foreground)]">сохраните — бот проверит username</span>;
+  }
+  const id = usernames[key];
+  return id
+    ? <span className="text-xs text-[color:var(--color-success)]">{key} → ID {id}</span>
+    : <span className="text-xs text-[color:var(--color-warning)]">{key} ещё не писал боту — пусть отправит ему /start</span>;
+}
+
 export default function SettingsPoshivBot() {
   const { toast } = useToast();
   const [loading, setLoading] = useState(true);
@@ -64,9 +87,15 @@ export default function SettingsPoshivBot() {
     const ids = managers
       .split(/[,\s]+/)
       .filter(Boolean)
-      .map(Number);
-    if (ids.some((n) => !Number.isInteger(n) || n <= 0)) {
-      toast('ID руководителей — только целые числа через запятую', 'error');
+      .map(normPerson);
+    if (ids.some((v) => v === undefined)) {
+      toast('Руководители — Telegram ID или @username через запятую', 'error');
+      return;
+    }
+    const masterVals = Object.entries(masters).map(([k, v]) => [k, v === '' ? null : normPerson(v)]);
+    const badMaster = masterVals.find(([, v]) => v === undefined);
+    if (badMaster) {
+      toast(`Мастер «${badMaster[0]}»: нужен Telegram ID или @username`, 'error');
       return;
     }
     setSaving(true);
@@ -74,9 +103,7 @@ export default function SettingsPoshivBot() {
       await api.put('poshiv-bot/settings', {
         manager_ids: ids,
         check_time: checkTime,
-        masters: Object.fromEntries(
-          Object.entries(masters).map(([k, v]) => [k, v === '' ? null : Number(v)]),
-        ),
+        masters: Object.fromEntries(masterVals),
         stage_next: stageNext,
       });
       toast('Сохранено. Изменения применятся после перезапуска бота', 'success');
@@ -193,25 +220,30 @@ export default function SettingsPoshivBot() {
         </Field>
 
         <Field
-          label="Telegram ID руководителей"
-          hint="Через запятую. Им приходят карточки новых заказов и уведомления мастеров."
+          label="Руководители — Telegram ID или @username"
+          hint="Через запятую. Им приходят карточки новых заказов и уведомления мастеров. По @username бот узнаёт человека, когда тот ему напишет."
         >
           <input
             type="text"
             className="input"
             value={managers}
             onChange={(e) => edit(setManagers)(e.target.value)}
-            placeholder="699539809, 5495663985"
+            placeholder="699539809, @username"
           />
+          <div className="mt-1 flex flex-col gap-0.5">
+            {managers.split(/[,\s]+/).filter((t) => t && !/^\d+$/.test(t)).map((t) => (
+              <UsernameStatus key={t} value={t} usernames={doc?.usernames} />
+            ))}
+          </div>
         </Field>
       </Section>
 
       <Section title="Мастера по этапам">
         <p className="text-xs text-[color:var(--color-muted-foreground)]">
-          Telegram ID мастера, которому уходит карточка задания при переводе заказа на
-          этап. Пустое поле — мастер не назначен: этап продолжает работать, просто без
-          уведомления. Неверный ID здесь ломает отправку, поэтому вписывайте только
-          подтверждённые.
+          Telegram ID или @username мастера, которому уходит карточка задания при переводе
+          заказа на этап. Пустое поле — мастер не назначен: этап продолжает работать, просто
+          без уведомления. Мастер, записанный по @username, начинает получать карточки после
+          того, как сам напишет боту (/start) — до этого Telegram не даёт боту ему писать.
         </p>
         <div className="space-y-2">
           {stages.map((s) => (
@@ -222,17 +254,17 @@ export default function SettingsPoshivBot() {
               <span className="text-sm sm:w-48 sm:shrink-0">{s.label}</span>
               <input
                 type="text"
-                inputMode="numeric"
                 className="input sm:max-w-[14rem]"
                 value={masters[s.key] ?? ''}
                 onChange={(e) =>
                   edit(setMasters)((m) => ({
                     ...m,
-                    [s.key]: e.target.value.replace(/\D/g, ''),
+                    [s.key]: e.target.value.replace(/\s/g, ''),
                   }))
                 }
-                placeholder="не назначен"
+                placeholder="ID или @username"
               />
+              <UsernameStatus value={masters[s.key]} usernames={doc?.usernames} />
             </div>
           ))}
         </div>
