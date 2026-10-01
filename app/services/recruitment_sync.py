@@ -116,7 +116,7 @@ async def _refresh_hh_token_if_needed(db, src) -> str | None:
     """
     global _hh_refresh_failure_notified
     from app.services import hh_api
-    from app.services.notify import send_notification
+    from app.services.notify import notify_group
 
     if not src.refresh_token:
         return None
@@ -134,7 +134,7 @@ async def _refresh_hh_token_if_needed(db, src) -> str | None:
         db.commit()
         if not _hh_refresh_failure_notified:
             _hh_refresh_failure_notified = True
-            await send_notification(
+            await notify_group("candidates_new", 
                 "🛠 <b>СБОЙ · hh.ru не обновил токен</b>\n"
                 "Отклики с hh.ru не загружаются. Переподключите hh.ru в разделе «Подбор» "
                 f"— требуется повторная авторизация.\n\nОшибка: {e}"
@@ -159,7 +159,7 @@ async def _refresh_hh_token_if_needed(db, src) -> str | None:
 
 
 async def _notify_new_candidates(source: str, link, candidates: list[dict], backlog: bool = False) -> None:
-    from app.services.notify import send_notification
+    from app.services.notify import notify_group
     src_label = "hh.ru" if source == "hh" else "Авито"
     vac_title = (getattr(link, "external_vacancy_title", "") or "") or \
                 (link.vacancy.title if getattr(link, "vacancy", None) else "") or \
@@ -184,7 +184,7 @@ async def _notify_new_candidates(source: str, link, candidates: list[dict], back
         lines.append(f"• <b>{c['name']}</b>{age_str}{phone_str}{resume_str}")
     if count > _NOTIFY_LIST_LIMIT:
         lines.append(f"\n…и ещё {count - _NOTIFY_LIST_LIMIT} — смотрите в разделе «Подбор».")
-    await send_notification("\n".join(lines))
+    await notify_group("candidates_new", "\n".join(lines))
 
 
 def _naive_utc(dt):
@@ -248,7 +248,7 @@ async def _check_hh_messages(db, src, token: str) -> None:
     """Poll hh.ru messages for active candidates, notify on new applicant messages."""
     from app.models.recruitment import Candidate
     from app.services import hh_api
-    from app.services.notify import send_notification
+    from app.services.notify import notify_group
     from app.db.session import SessionLocal
 
     from app.services import quick_screening, recruitment_stages as rs
@@ -331,7 +331,7 @@ async def _check_hh_messages(db, src, token: str) -> None:
                     return
 
                 logger.warning("[Sync] hh NEW applicant message from %s (neg=%s), attempting notification", name, neg_id)
-                ok = await send_notification(
+                ok = await notify_group("candidate_messages", 
                     f"🔴 <b>НУЖЕН ОТВЕТ · Сообщение от кандидата (hh.ru)</b>\n"
                     f"<b>{name}</b>: {msg_text[:200]}"
                 )
@@ -489,7 +489,7 @@ async def notify_unhandled_message(cand_id: int, name: str, text: str,
     """
     from app.db.session import SessionLocal
     from app.models.recruitment import Candidate
-    from app.services.notify import send_notification
+    from app.services.notify import notify_group
 
     text = (text or "").strip()
     if not text:
@@ -509,7 +509,7 @@ async def notify_unhandled_message(cand_id: int, name: str, text: str,
 
     label = _SOURCE_LABEL.get(source, source)
     when = await _schedule_call_if_named(cand_id, name, text)
-    ok = await send_notification(
+    ok = await notify_group("candidate_messages", 
         f"🔴 <b>НУЖЕН ОТВЕТ · Сообщение от кандидата ({label})</b>\n"
         f"<b>{name}</b>: {text[:200]}"
         # Не «напоминание создано»: доставка напоминаний по задачам сейчас

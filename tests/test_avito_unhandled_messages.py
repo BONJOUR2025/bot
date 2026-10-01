@@ -53,7 +53,7 @@ class TestNotification:
     def sent(self, monkeypatch):
         out = []
 
-        async def fake(text):
+        async def fake(text, **_kw):
             out.append(text)
             return True
 
@@ -109,7 +109,7 @@ class TestNotification:
     def test_marked_before_sending_so_a_failed_send_cannot_loop(self, sent, db, monkeypatch):
         """Пометка ставится ДО отправки: иначе упавший Telegram означал бы
         повторное уведомление на каждом цикле опроса."""
-        async def boom(text):
+        async def boom(text, **_kw):
             raise RuntimeError("telegram down")
 
         monkeypatch.setattr("app.services.notify.send_notification", boom)

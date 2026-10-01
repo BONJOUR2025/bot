@@ -305,7 +305,6 @@ async def error_handler(update, context):
 def register_jobs(app):
     from datetime import time
     from telegram.ext import ContextTypes
-    from ..config import ADMIN_CHAT_ID
     from ..services.birthday_service import get_upcoming_birthdays
     from ..utils.logger import log_job
 
@@ -329,10 +328,10 @@ def register_jobs(app):
             messages.append("⚪ Сегодня день рождения у:\n" + "\n".join(today_lines))
         if tomorrow_lines:
             messages.append("⚪ Завтра день рождения у:\n" + "\n".join(tomorrow_lines))
-        if messages and ADMIN_CHAT_ID:
-            await context.bot.send_message(
-                chat_id=ADMIN_CHAT_ID, text="\n\n".join(messages)
-            )
+        if messages:
+            from ..services.notify import notify_group
+
+            await notify_group("digest", "\n\n".join(messages))
 
     app.job_queue.run_daily(birthday_reminder, time(hour=9, minute=0))
 
@@ -363,9 +362,14 @@ def register_jobs(app):
                     f"💰 {amount:,.0f} ₽\n"
                     f"📅 Срок: {due.strftime('%d.%m.%Y')}"
                 )
-                targets = [tg_id] if tg_id else []
-                if ADMIN_CHAT_ID and str(ADMIN_CHAT_ID) not in targets:
-                    targets.append(str(ADMIN_CHAT_ID))
+                # Ответственному за платёж — всегда; руководству — по
+                # настройкам группы «Финансы».
+                from ..services import notification_routing
+
+                targets = [str(tg_id)] if tg_id else []
+                for admin_chat in notification_routing.recipients("finance"):
+                    if str(admin_chat) not in targets:
+                        targets.append(str(admin_chat))
                 for chat_id in targets:
                     if chat_id:
                         try:

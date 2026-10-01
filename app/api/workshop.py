@@ -196,10 +196,10 @@ def create_workshop_router() -> APIRouter:
             invalidate_wip(data.master_uid)
             invalidate()
             try:
-                from app.services.notify import send_notification
+                from app.services.notify import notify_group
 
                 what = " и ".join("вход" if a == "in" else "выход" for a in written)
-                await send_notification(
+                await notify_group("workshop", 
                     f"🛠 <b>Отметка через старшего мастера</b>\n{lead} поставил {what} за "
                     f"{master['name']}\nЗаказ {doc}: {result['service'].get('name')}"
                     + (f"\n⚠️ Не записано: {result['failed']['reason']}" if result["failed"] else "")
@@ -262,9 +262,9 @@ def create_workshop_router() -> APIRouter:
         who = ", ".join(f"{p['name']} {p['percent']}%" for p in parts)
         scan_logger.info("Деление услуги %s (заказ %s) — %s: %s", service_id, svc["doc_num"], lead, who)
         try:
-            from app.services.notify import send_notification
+            from app.services.notify import notify_group
 
-            await send_notification(
+            await notify_group("workshop", 
                 f"➗ <b>Услуга поделена между мастерами</b>\n{lead}: заказ {svc['doc_num']}, "
                 f"{svc['name']} ({svc['kredit']:.0f} ₽)\n{who}"
             )
@@ -284,9 +284,9 @@ def create_workshop_router() -> APIRouter:
         lead = getattr(current, "display_name", None) or getattr(current, "login", None) or "старший мастер"
         scan_logger.info("Деление услуги %s снято — %s", service_id, lead)
         try:
-            from app.services.notify import send_notification
+            from app.services.notify import notify_group
 
-            await send_notification(
+            await notify_group("workshop", 
                 f"➗ <b>Деление услуги снято</b>\n{lead}: заказ {(rec or {}).get('doc_num', '')}, "
                 f"{(rec or {}).get('service_name', '')} — зарплата снова целиком мастеру выхода"
             )

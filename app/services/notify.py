@@ -28,7 +28,7 @@ async def _alert_secretary_disconnected(reason: str) -> None:
         return
     _last_disconnect_alert = now
     try:
-        await send_notification(
+        await notify_group("system", 
             f"🛠 <b>СБОЙ · Secretary Mode отключён</b>\n{reason}\n\n"
             f"Пока бот не переподключён, ИИ-ассистент и напоминания кандидатам "
             f"работать не будут — переподключите Chat Automation в настройках Telegram."
@@ -101,7 +101,7 @@ async def send_secretary_message(chat_id: str | int, text: str) -> str | None:
         # All 3 attempts failed — alert admin
         error_str = f"Telegram: {last_description}"
         try:
-            await send_notification(
+            await notify_group("candidate_messages", 
                 f"🛠 <b>СБОЙ · Сообщение не доставлено кандидату</b>\n"
                 f"chat_id: {chat_id}\n"
                 f"Текст: {text[:100]}...\n"
@@ -116,34 +116,9 @@ async def send_secretary_message(chat_id: str | int, text: str) -> str | None:
         return f"Ошибка отправки в Telegram: {exc}"
 
 
-async def send_notification_with_keyboard(text: str, buttons: list) -> bool:
+async def send_notification_with_keyboard(text: str, buttons: list, group: str = "system") -> bool:
     """Send notification with inline keyboard. buttons = [[{"text":"..","callback_data":".."}]]"""
-    try:
-        from app.services.config_service import ConfigService
-        chat_id = str(ConfigService().load().get("notification_chat_id") or "").strip()
-        if not chat_id:
-            return False
-        from app.config import TOKEN
-        if not TOKEN:
-            return False
-        from app.settings import settings
-        proxy = getattr(settings, "telegram_proxy", None)
-        url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
-        payload = {
-            "chat_id": int(chat_id),
-            "text": text,
-            "parse_mode": "HTML",
-            "reply_markup": {"inline_keyboard": buttons},
-        }
-        client_kwargs = {"timeout": 10.0}
-        if proxy:
-            client_kwargs["proxy"] = proxy
-        async with httpx.AsyncClient(**client_kwargs) as client:
-            r = await client.post(url, json=payload)
-        return r.status_code == 200
-    except Exception as exc:
-        log.warning("send_notification_with_keyboard error: %s", exc)
-        return False
+    return await send_notification(text, group=group, buttons=buttons)
 
 
 async def send_chat_message(
@@ -259,28 +234,33 @@ async def send_chat_document(
 # вчитываясь.
 
 
-async def notify_action(title: str, body: str = "") -> bool:
+async def notify_action(title: str, body: str = "", group: str = "candidate_messages") -> bool:
     """Требует вашего действия сейчас: кандидат ждёт ответа."""
-    return await send_notification(f"🔴 <b>НУЖЕН ОТВЕТ · {title}</b>" + (f"\n{body}" if body else ""))
+    return await send_notification(f"🔴 <b>НУЖЕН ОТВЕТ · {title}</b>" + (f"\n{body}" if body else ""), group=group)
 
 
-async def notify_info(title: str, body: str = "") -> bool:
+async def notify_info(title: str, body: str = "", group: str = "system") -> bool:
     """К сведению: бот справился сам, но знать полезно."""
-    return await send_notification(f"⚪ <b>{title}</b>" + (f"\n{body}" if body else ""))
+    return await send_notification(f"⚪ <b>{title}</b>" + (f"\n{body}" if body else ""), group=group)
 
 
-async def notify_failure(title: str, body: str = "") -> bool:
+async def notify_failure(title: str, body: str = "", group: str = "system") -> bool:
     """Что-то сломалось — это про систему, а не про кандидата."""
-    return await send_notification(f"🛠 <b>СБОЙ · {title}</b>" + (f"\n{body}" if body else ""))
+    return await send_notification(f"🛠 <b>СБОЙ · {title}</b>" + (f"\n{body}" if body else ""), group=group)
 
 
-async def send_notification(text: str) -> bool:
-    """Send text to notification_chat_id from config. Returns True on success, never raises."""
+async def send_notification(text: str, group: str = "system", buttons: list | None = None,
+                            parse_mode: str | None = "HTML") -> bool:
+    """Служебное уведомление группе получателей (notification_routing).
+
+    Группа выключена или пуста — ничего не отправляем и возвращаем False.
+    True — если дошло хотя бы до одного получателя. Никогда не бросает."""
     try:
-        from app.services.config_service import ConfigService
-        chat_id = str(ConfigService().load().get("notification_chat_id") or "").strip()
-        if not chat_id:
-            log.debug("send_notification: notification_chat_id not configured, skipping")
+        from app.services import notification_routing
+
+        chat_ids = notification_routing.recipients(group)
+        if not chat_ids:
+            log.debug("send_notification: группа %s выключена или без получателей", group)
             return False
 
         from app.config import TOKEN
@@ -290,24 +270,38 @@ async def send_notification(text: str) -> bool:
 
         from app.settings import settings
         proxy = getattr(settings, "telegram_proxy", None)
-
         url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
-        payload = {"chat_id": int(chat_id), "text": text, "parse_mode": "HTML"}
-
         client_kwargs = {"timeout": 10.0}
         if proxy:
             client_kwargs["proxy"] = proxy
 
+        delivered = 0
         async with httpx.AsyncClient(**client_kwargs) as client:
-            r = await client.post(url, json=payload)
-
-        if r.status_code == 200:
-            log.info("Notification sent to chat_id=%s", chat_id)
-            return True
-        else:
-            log.warning("Notification failed: HTTP %s — %s", r.status_code, r.text[:200])
-            return False
+            for chat_id in chat_ids:
+                payload: dict = {"chat_id": int(chat_id), "text": text}
+                if parse_mode:
+                    payload["parse_mode"] = parse_mode
+                if buttons:
+                    payload["reply_markup"] = {"inline_keyboard": buttons}
+                try:
+                    r = await client.post(url, json=payload)
+                except Exception as exc:
+                    log.warning("Notification [%s] to %s failed: %s", group, chat_id, exc)
+                    continue
+                if r.status_code == 200:
+                    delivered += 1
+                    log.info("Notification [%s] sent to chat_id=%s", group, chat_id)
+                else:
+                    log.warning("Notification [%s] to %s failed: HTTP %s — %s",
+                                group, chat_id, r.status_code, r.text[:200])
+        return delivered > 0
 
     except Exception as exc:
         log.warning("send_notification error: %s", exc)
         return False
+
+
+async def notify_group(group: str, text: str, buttons: list | None = None) -> bool:
+    """send_notification с группой первым аргументом — чтобы в местах вызова
+    группа читалась сразу, а не терялась после многострочного текста."""
+    return await send_notification(text, group=group, buttons=buttons)

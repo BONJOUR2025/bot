@@ -43,7 +43,7 @@ export default function SettingsTelegram() {
           <Field label="card_dispatch_chat_id" hint="Чат для отправки реквизитов карты при выплате">
             <input className="input w-full font-mono" {...register('card_dispatch_chat_id')} />
           </Field>
-          <Field label="notification_chat_id" hint="Telegram ID для уведомлений: новые отклики, сообщения с hh.ru, привязка выплат">
+          <Field label="notification_chat_id" hint="Получатель по умолчанию: ему приходят группы уведомлений, которые ещё не настроены во вкладке «Уведомления»">
             <div className="flex gap-2">
               <input className="input flex-1 font-mono" placeholder="123456789" {...register('notification_chat_id')} />
               <button

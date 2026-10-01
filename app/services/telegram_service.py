@@ -432,15 +432,14 @@ class TelegramService:
         if self.bot is None:
             log("⚠️ Telegram bot not configured; cannot notify admin")
             raise TelegramNotConfiguredError("Telegram bot not configured")
-        if not ADMIN_CHAT_ID:
-            log("⚠️ ADMIN_CHAT_ID not configured; cannot notify admin")
+        from app.services import notification_routing
+
+        chat_ids = notification_routing.recipients("employee_messages")
+        if not chat_ids:
+            log("⚠️ Уведомления «Сообщения от сотрудников» выключены или без получателей")
             return
         text = f"💬 Сообщение от сотрудника\n\n👤 {name}\n\n{message}"
-        try:
-            await self.bot.send_message(chat_id=ADMIN_CHAT_ID, text=text)
-        except BadRequest as exc:
-            log(f"❌ Failed to send message to chat {ADMIN_CHAT_ID} — {exc}")
-            raise TelegramAPIError(str(exc)) from exc
+        await self._send_to_all(chat_ids, text)
 
     async def send_payout_request_to_admin(self, payout: Dict[str, Any]) -> None:
         """Notify the admin chat about a payout request."""
@@ -469,18 +468,24 @@ class TelegramService:
                 [InlineKeyboardButton("❌ Отклонить", callback_data=f"deny_payout_{payout['id']}")],
             ]
         )
-        if not ADMIN_CHAT_ID:
-            log("⚠️ ADMIN_CHAT_ID not configured; cannot notify admin")
+        from app.services import notification_routing
+
+        chat_ids = notification_routing.recipients("payouts")
+        if not chat_ids:
+            log("⚠️ Уведомления «Запросы на выплаты» выключены или без получателей")
             return
-        log(
-            f"[Telegram] Sending payout approval request to {ADMIN_CHAT_ID} — text: '{text[:50]}'"
-        )
-        try:
-            await self.bot.send_message(
-                chat_id=ADMIN_CHAT_ID,
-                text=text,
-                reply_markup=markup,
-            )
-        except BadRequest as exc:
-            log(f"❌ Failed to send message to chat {ADMIN_CHAT_ID} — {exc}")
-            raise TelegramAPIError(str(exc)) from exc
+        log(f"[Telegram] Sending payout approval request to {chat_ids} — text: '{text[:50]}'")
+        await self._send_to_all(chat_ids, text, reply_markup=markup)
+
+    async def _send_to_all(self, chat_ids: list[int], text: str, reply_markup=None) -> None:
+        """Каждому получателю группы. Ошибка у одного не мешает остальным;
+        если не дошло ни до кого — поднимаем ошибку, как раньше при одном чате."""
+        errors = []
+        for chat_id in chat_ids:
+            try:
+                await self.bot.send_message(chat_id=chat_id, text=text, reply_markup=reply_markup)
+            except BadRequest as exc:
+                log(f"❌ Failed to send message to chat {chat_id} — {exc}")
+                errors.append(str(exc))
+        if errors and len(errors) == len(chat_ids):
+            raise TelegramAPIError(errors[0])

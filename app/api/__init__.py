@@ -715,6 +715,15 @@ def create_app() -> FastAPI:
         dependencies=protected,
     )
 
+    # Кому и какие уведомления основного бота уходят (группы, получатели)
+    from .notification_routing import create_notification_routing_router
+
+    app.include_router(
+        create_notification_routing_router(),
+        prefix="/api",
+        dependencies=protected,
+    )
+
     # SPA фронтенд (Vite/React)
     # NOTE: We use explicit routes instead of app.mount() so that SPA routes
     # like /admin/login are served correctly (mount intercepts and returns 404

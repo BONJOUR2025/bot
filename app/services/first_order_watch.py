@@ -125,7 +125,7 @@ def _celebration(order: dict) -> str:
 async def check_and_notify() -> bool:
     """Проверить и поздравить, если пора. True — если уведомление ушло."""
     from app.services.config_service import ConfigService
-    from app.services.notify import send_notification
+    from app.services.notify import notify_group
 
     svc = ConfigService()
     cfg = svc.load()
@@ -161,7 +161,7 @@ async def check_and_notify() -> bool:
         svc.patch({CFG_SEEN: seen})
         log.info("first_order_watch: первый заказ в «%s» — %s", order["sclad_name"], order["doc_num"])
 
-        await send_notification(_celebration(order))
+        await notify_group("digest", _celebration(order))
         fired = True
 
     return fired

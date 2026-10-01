@@ -235,10 +235,10 @@ async def _process(msg: dict) -> None:
         db.close()
 
     if stranger:
-        from app.services.notify import send_notification
+        from app.services.notify import notify_group
         chat_id, text = stranger
         try:
-            await send_notification(
+            await notify_group("candidate_messages", 
                 "🔴 <b>НУЖЕН ОТВЕТ · Незнакомец пишет по вакансии (Авито)</b>\n"
                 f"{text[:200]}\n\n"
                 "Карточки в воронке нет — человек написал в чат без формального отклика."

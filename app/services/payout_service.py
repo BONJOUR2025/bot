@@ -125,10 +125,10 @@ class PayoutService:
     @staticmethod
     async def _notify_cash_move_linked(payout_dict: dict, move_id: str) -> None:
         try:
-            from app.services.notify import send_notification
+            from app.services.notify import notify_group
             name = payout_dict.get("payout_type") or "Выплата"
             amount = payout_dict.get("amount", "")
-            await send_notification(
+            await notify_group("finance", 
                 f"⚪ <b>Выплата привязана к кассовому перемещению</b>\n"
                 f"{name} · {amount} ₽ → перемещение #{move_id}"
             )

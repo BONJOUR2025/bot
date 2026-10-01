@@ -11,7 +11,7 @@ async def send_morning_briefing():
     from app.models.recruitment import Candidate, TelegramMessage
     from app.services.config_service import ConfigService
     from app.services.task_service import get_task_service
-    from app.services.notify import send_notification
+    from app.services.notify import notify_group
 
     cfg = ConfigService().load()
     today = date_cls.today()
@@ -107,7 +107,7 @@ async def send_morning_briefing():
 
     # Утренняя сводка — тоже «к сведению»: единый префикс позволяет отсеивать
     # её глазом наравне с остальным, не вчитываясь.
-    await send_notification("⚪ <b>Утренняя сводка</b>\n\n" + "\n\n".join(sections))
+    await notify_group("digest", "⚪ <b>Утренняя сводка</b>\n\n" + "\n\n".join(sections))
     log.info("Morning briefing sent")
 
 

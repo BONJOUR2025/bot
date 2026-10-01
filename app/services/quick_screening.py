@@ -285,7 +285,7 @@ async def start_screening(db, candidate, vacancy, src, token: str,
 
     allow_twin=True — запуск по явному решению человека, даже если этот же
     кандидат уже проходит или прошёл опрос по другой вакансии."""
-    from app.services.notify import send_notification
+    from app.services.notify import notify_group
 
     from app.services import candidate_hours
 
@@ -327,7 +327,7 @@ async def start_screening(db, candidate, vacancy, src, token: str,
     err = await _send(db, candidate, src, token, greeting)
     if err:
         log.warning("quick_screening: failed to send greeting to candidate %s: %s", candidate.id, err)
-        await send_notification(
+        await notify_group("candidate_messages", 
             f"🛠 <b>СБОЙ · Не удалось написать кандидату</b>\n{_candidate_label(candidate, vacancy)}\n\n"
             f"Ошибка: {err}\nОтветьте вручную на площадке."
         )
@@ -468,7 +468,7 @@ def _format_answers(answers: list[dict]) -> str:
 async def _handle_interest_reply(db, candidate, vacancy, src, token: str,
                                   state: dict, text: str, cfg: dict) -> None:
     """Reply to INTEREST_QUESTION, before the real quick_questions start."""
-    from app.services.notify import send_notification
+    from app.services.notify import notify_group
 
     # A counter-question here gets the same treatment as during the real
     # questions — stop and hand over rather than guess an answer.
@@ -476,7 +476,7 @@ async def _handle_interest_reply(db, candidate, vacancy, src, token: str,
         state["status"] = "waiting_admin"
         state["reason"] = "question"
         save_state(db, candidate, state)
-        await send_notification(
+        await notify_group("candidate_messages", 
             f"🔴 <b>НУЖЕН ОТВЕТ · Вопрос от кандидата</b>\n"
             f"{_candidate_label(candidate, vacancy)}\n\n"
             f"«{text[:400]}»\n\nБот больше не пишет — отвечайте на площадке."
@@ -510,7 +510,7 @@ async def _handle_interest_reply(db, candidate, vacancy, src, token: str,
         state["status"] = "waiting_admin"
         state["reason"] = "send_failed"
         save_state(db, candidate, state)
-        await send_notification(
+        await notify_group("candidate_messages", 
             f"🛠 <b>СБОЙ · Не удалось задать первый вопрос</b>\n{_candidate_label(candidate, vacancy)}\n\nОшибка: {err}"
         )
         return
@@ -572,7 +572,7 @@ async def _process_message(db, candidate, vacancy, src, token: str,
     """Собственно обработка ответа кандидата — без дедупа и без проверки
     рабочих часов: то же самое проигрывается и «сейчас», и отложенно."""
     from app.services import candidate_profile
-    from app.services.notify import send_notification
+    from app.services.notify import notify_group
 
     if state.get("phase", "questions") == "interest":
         await _handle_interest_reply(db, candidate, vacancy, src, token, state, text, cfg)
@@ -632,7 +632,7 @@ async def _process_message(db, candidate, vacancy, src, token: str,
             state["status"] = "waiting_admin"
             state["reason"] = "question"
             save_state(db, candidate, state)
-            await send_notification(
+            await notify_group("candidate_messages", 
                 f"🔴 <b>НУЖЕН ОТВЕТ · Вопрос от кандидата</b>\n"
                 f"{_candidate_label(candidate, vacancy)}\n\n"
                 f"«{text[:400]}»\n\n"
@@ -647,7 +647,7 @@ async def _process_message(db, candidate, vacancy, src, token: str,
             state["status"] = "waiting_admin"
             state["reason"] = "send_failed"
             save_state(db, candidate, state)
-            await send_notification(
+            await notify_group("candidate_messages", 
                 f"🛠 <b>СБОЙ · Не удалось задать следующий вопрос</b>\n"
                 f"{_candidate_label(candidate, vacancy)}\n\nОшибка: {err}"
             )
@@ -690,7 +690,7 @@ async def _process_message(db, candidate, vacancy, src, token: str,
                     candidate.id, exc_info=True)
 
     summary = candidate_profile.format_for_notification(profile)
-    await send_notification(
+    await notify_group("candidate_messages", 
         (f"🔴 <b>НУЖЕН ОТВЕТ · Анкета готова, есть вопрос от кандидата</b>"
          if asked_back else "🔴 <b>НУЖЕН ОТВЕТ · Анкета готова</b>")
         + f"\n{_candidate_label(candidate, vacancy)}\n\n"
@@ -779,7 +779,7 @@ async def flush_deferred(db, resolve_source) -> int:
 async def check_silence(db) -> None:
     """Alert once per candidate who has not answered the pending question for 24h."""
     from app.models.recruitment import Candidate, Vacancy
-    from app.services.notify import send_notification
+    from app.services.notify import notify_group
 
     now = datetime.utcnow()
     silent: list[str] = []
@@ -823,7 +823,7 @@ async def check_silence(db) -> None:
         log.info("quick_screening: silence alert for candidate_id=%s", c.id)
 
     if silent:
-        await send_notification(
+        await notify_group("candidates_new", 
             f"⚪ <b>Молчат сутки — {len(silent)}</b>\n\n"
             + "\n".join(silent)
             + "\n\nБот им больше не пишет."

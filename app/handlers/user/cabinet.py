@@ -5,7 +5,6 @@ from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton
 from telegram.ext import ContextTypes, ConversationHandler
 
 from ...config import (
-    ADMIN_CHAT_ID,
     USERS_FILE,
     MAX_ADVANCE_AMOUNT_PER_MONTH,
 )
@@ -213,9 +212,15 @@ async def handle_edit_confirmation(
                 [InlineKeyboardButton("❌ Отклонить", callback_data=f"reject_change_{user_id}")],
             ]
         )
-        await context.bot.send_message(
-            chat_id=ADMIN_CHAT_ID, text=admin_message, reply_markup=keyboard
-        )
+        from ...services import notification_routing
+
+        for admin_chat in notification_routing.recipients("employee_changes"):
+            try:
+                await context.bot.send_message(
+                    chat_id=admin_chat, text=admin_message, reply_markup=keyboard
+                )
+            except Exception as exc:
+                log(f"❌ Не удалось отправить запрос на изменение данных в {admin_chat}: {exc}")
         await query.edit_message_text(
             f"✅ Запрос на изменение {field} отправлен администратору на проверку.",
             reply_markup=None,

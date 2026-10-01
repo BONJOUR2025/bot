@@ -1,6 +1,6 @@
 import { NavLink, Navigate, Outlet, Route, Routes } from 'react-router-dom';
 import {
-  SlidersHorizontal, Send, Sparkles, FileText, BookOpen, Lock, Stethoscope, Plug, Coins, Shield, Scissors,
+  SlidersHorizontal, Send, Sparkles, FileText, BookOpen, Lock, Stethoscope, Plug, Coins, Shield, Scissors, Bell,
 } from 'lucide-react';
 
 import SettingsGeneral from './settings/General.jsx';
@@ -14,10 +14,12 @@ import SettingsDiagnostics from './settings/Diagnostics.jsx';
 import SettingsIntegrations from './settings/Integrations.jsx';
 import SettingsVpn from './settings/Vpn.jsx';
 import SettingsPoshivBot from './settings/PoshivBot.jsx';
+import SettingsNotifications from './settings/Notifications.jsx';
 
 const TABS = [
   { to: '/admin/settings/general',     label: 'Общие',         icon: SlidersHorizontal },
   { to: '/admin/settings/telegram',    label: 'Telegram',      icon: Send },
+  { to: '/admin/settings/notifications', label: 'Уведомления', icon: Bell },
   { to: '/admin/settings/automation',  label: 'Автоматизация', icon: Sparkles },
   { to: '/admin/settings/ai-usage',    label: 'Расход AI',     icon: Coins },
   { to: '/admin/settings/integrations', label: 'Интеграции',   icon: Plug },
@@ -69,6 +71,7 @@ export default function Settings() {
         <Route index element={<Navigate to="/admin/settings/general" replace />} />
         <Route path="general" element={<SettingsGeneral />} />
         <Route path="telegram" element={<SettingsTelegram />} />
+        <Route path="notifications" element={<SettingsNotifications />} />
         <Route path="automation" element={<SettingsAutomation />} />
         <Route path="ai-usage" element={<SettingsAiUsage />} />
         <Route path="integrations" element={<SettingsIntegrations />} />

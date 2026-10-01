@@ -27,7 +27,7 @@ ORDER = {"doc_num": "00020", "doc_date": None, "sclad_name": "Чистомат 1
 def sent(monkeypatch):
     out = []
 
-    async def fake(text):
+    async def fake(text, **_kw):
         out.append(text)
         return True
 
@@ -108,7 +108,7 @@ class TestFiresOnce:
         run_async(fw.check_and_notify())
         db["next"] = ORDER
 
-        async def boom(text):
+        async def boom(text, **_kw):
             raise RuntimeError("telegram down")
 
         monkeypatch.setattr("app.services.notify.send_notification", boom)

@@ -52,7 +52,7 @@ class _FakeDb:
 def alerts(monkeypatch):
     sent = []
 
-    async def fake_send(text):
+    async def fake_send(text, **_kw):
         sent.append(text)
         return True
 

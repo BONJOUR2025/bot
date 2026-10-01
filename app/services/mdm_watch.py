@@ -101,7 +101,7 @@ def _check_health(repo, device: dict[str, Any], now: datetime, out: list[str]) -
 
 async def check_and_notify() -> None:
     from app.data.mdm_repository import get_mdm_repository
-    from app.services.notify import send_notification
+    from app.services.notify import notify_group
 
     repo = get_mdm_repository()
     now = datetime.now(timezone.utc)
@@ -139,11 +139,11 @@ async def check_and_notify() -> None:
         # Категория «СБОЙ», а не «к сведению»: замолчавший телефон — это либо
         # сломанная связь, либо унесённый аппарат, и то и другое требует
         # действий. Префиксы — общая конвенция ленты, см. tests/test_notification_tiers.py.
-        await send_notification(
+        await notify_group("system", 
             f"🛠 <b>СБОЙ · Не выходят на связь: {len(gone)} {word}</b>\n{lines}\n\n"
             f"Если молчат все сразу — скорее всего дело не в телефонах, а в туннеле."
         )
 
     if back:
         lines = "\n".join(f"• {_title(d)}" for d in back)
-        await send_notification(f"⚪ <b>Телефоны снова на связи</b>\n{lines}")
+        await notify_group("system", f"⚪ <b>Телефоны снова на связи</b>\n{lines}")

@@ -14,7 +14,6 @@ from __future__ import annotations
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
-from app.config import ADMIN_CHAT_ID
 from app.data.employee_repository import EmployeeRepository
 from app.services.telegram_service import TelegramService
 from app.utils.logger import log
@@ -22,8 +21,11 @@ from app.utils.logger import log
 
 async def notify_admin_profile_change(employee_id: str, employee_name: str, field: str, new_value: str) -> None:
     service = TelegramService(EmployeeRepository())
-    if service.bot is None or not ADMIN_CHAT_ID:
-        log("⚠️ [vk] Telegram bot/ADMIN_CHAT_ID не настроены — не удалось уведомить админа")
+    from app.services import notification_routing
+
+    chat_ids = notification_routing.recipients("employee_changes")
+    if service.bot is None or not chat_ids:
+        log("⚠️ [vk] Telegram-бот не настроен или уведомления «Изменение данных сотрудников» выключены")
         return
     text = (
         f"🔴 РЕШЕНИЕ · Изменение данных сотрудника (VK)\n"
@@ -36,6 +38,7 @@ async def notify_admin_profile_change(employee_id: str, employee_name: str, fiel
         [InlineKeyboardButton("❌ Отклонить", callback_data=f"reject_change_{employee_id}")],
     ])
     try:
-        await service.bot.send_message(chat_id=ADMIN_CHAT_ID, text=text, reply_markup=keyboard)
+        for chat_id in chat_ids:
+            await service.bot.send_message(chat_id=chat_id, text=text, reply_markup=keyboard)
     except Exception as exc:
         log(f"❌ [vk] Не удалось уведомить админа о смене данных: {exc}")

@@ -45,7 +45,7 @@ def reset_notify_guard():
 def no_notify(monkeypatch):
     sent = []
 
-    async def fake_send(text):
+    async def fake_send(text, **_kw):
         sent.append(text)
         return True
 
