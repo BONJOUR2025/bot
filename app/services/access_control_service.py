@@ -453,10 +453,49 @@ class AccessControlService:
     # ------------------------------------------------------------------
     # public API
     # ------------------------------------------------------------------
-    def list_roles(self) -> list[dict[str, Any]]:
+    # ------------------------------------------------------------------
+    # владелец: невидим и неприкосновенен для всех, кто сам не владелец
+    # ------------------------------------------------------------------
+    # Владелец — учётка, у которой права «*» (через роль или напрямую). Даже
+    # пользователь со всеми остальными правами, включая «Управление доступом»,
+    # не видит её в списке, не может изменить, удалить или посмотреть пароль,
+    # не может править роль владельца и не может сделать владельцем кого-то
+    # ещё. Иначе «полный доступ» означал бы и возможность отобрать доступ у
+    # самого владельца.
+    @staticmethod
+    def _role_is_owner(role: dict[str, Any] | None) -> bool:
+        return bool(role) and "*" in (role.get("permissions") or [])
+
+    def _record_is_owner(self, record: dict[str, Any] | None) -> bool:
+        if not record:
+            return False
+        if "*" in (record.get("permissions") or []):
+            return True
+        return self._role_is_owner(self._get_role(record.get("role_id")))
+
+    def actor_is_owner(self, actor: ResolvedUser | None) -> bool:
+        if actor is None:
+            return True  # внутренние вызовы (миграции, скрипты) — без ограничений
+        return self._record_is_owner(self._get_user(actor.id))
+
+    def _guard_owner_record(self, actor: ResolvedUser | None, record: dict[str, Any] | None) -> None:
+        if record and self._record_is_owner(record) and not self.actor_is_owner(actor):
+            raise ValueError("user_not_found")
+
+    def _guard_owner_grant(self, actor: ResolvedUser | None, role_id: str | None,
+                           permissions: Iterable[str] | None) -> None:
+        if self.actor_is_owner(actor):
+            return
+        if "*" in (permissions or []) or self._role_is_owner(self._get_role(role_id)):
+            raise ValueError("privilege_escalation")
+
+    def list_roles(self, actor: ResolvedUser | None = None) -> list[dict[str, Any]]:
         self._reload()
         roles = []
+        hide_owner = not self.actor_is_owner(actor)
         for role in self._data.get("roles", []):
+            if hide_owner and self._role_is_owner(role):
+                continue
             roles.append(
                 {
                     "id": role.get("id"),
@@ -467,10 +506,13 @@ class AccessControlService:
             )
         return roles
 
-    def list_users(self) -> list[dict[str, Any]]:
+    def list_users(self, actor: ResolvedUser | None = None) -> list[dict[str, Any]]:
         self._reload()
         result: list[dict[str, Any]] = []
+        hide_owner = not self.actor_is_owner(actor)
         for user in self._data.get("users", []):
+            if hide_owner and self._record_is_owner(user):
+                continue
             resolved = self.resolve_user(user.get("id"))
             if not resolved:
                 continue
@@ -552,6 +594,7 @@ class AccessControlService:
                 [p["id"] for p in AVAILABLE_PERMISSIONS] if "*" in permissions else permissions
             )
             self._check_privilege_escalation(actor, resolved_permissions)
+            self._guard_owner_grant(actor, None, permissions)
             role = {
                 "id": role_id,
                 "name": data.get("name", role_id),
@@ -568,7 +611,7 @@ class AccessControlService:
         with self._lock:
             self._reload()
             role = self._get_role(role_id)
-            if not role:
+            if not role or (self._role_is_owner(role) and not self.actor_is_owner(actor)):
                 raise ValueError("role_not_found")
             if "name" in data and data["name"]:
                 role["name"] = data["name"]
@@ -578,15 +621,18 @@ class AccessControlService:
                     [p["id"] for p in AVAILABLE_PERMISSIONS] if "*" in permissions else permissions
                 )
                 self._check_privilege_escalation(actor, resolved_permissions)
+                self._guard_owner_grant(actor, None, permissions)
                 role["permissions"] = permissions
             if "bot_buttons" in data:
                 role["bot_buttons"] = self._validate_buttons(data.get("bot_buttons")) or []
             self._persist()
             return role
 
-    def delete_role(self, role_id: str) -> None:
+    def delete_role(self, role_id: str, actor: ResolvedUser | None = None) -> None:
         with self._lock:
             self._reload()
+            if self._role_is_owner(self._get_role(role_id)) and not self.actor_is_owner(actor):
+                raise ValueError("role_not_found")
             if any(user.get("role_id") == role_id for user in self._data.get("users", [])):
                 raise ValueError("role_in_use")
             self._data["roles"] = [r for r in self._data.get("roles", []) if r.get("id") != role_id]
@@ -634,6 +680,7 @@ class AccessControlService:
             self._check_privilege_escalation(
                 actor, self._resolve_permissions(user_record, role)
             )
+            self._guard_owner_grant(actor, role_id, permissions)
             self._remember_password(user_record, password, by="admin")
             self._data.setdefault("users", []).append(user_record)
             self._persist()
@@ -647,6 +694,9 @@ class AccessControlService:
             user = self._get_user(user_id)
             if not user:
                 raise ValueError("user_not_found")
+            self._guard_owner_record(actor, user)
+            self._guard_owner_grant(actor, data.get("role_id") if "role_id" in data else None,
+                                    data.get("permissions") if "permissions" in data else None)
             login = data.get("login")
             if login and login != user.get("login"):
                 if self._get_user_by_login(login):
@@ -700,9 +750,10 @@ class AccessControlService:
                 self._persist()
         return changed
 
-    def delete_user(self, user_id: str) -> None:
+    def delete_user(self, user_id: str, actor: ResolvedUser | None = None) -> None:
         with self._lock:
             self._reload()
+            self._guard_owner_record(actor, self._get_user(user_id))
             self._data["users"] = [u for u in self._data.get("users", []) if u.get("id") != user_id]
             self._persist()
 
@@ -770,13 +821,14 @@ class AccessControlService:
             self._remember_password(user, new_password, by="self")
             self._persist()
 
-    def reveal_password(self, user_id: str) -> dict[str, Any]:
+    def reveal_password(self, user_id: str, actor: ResolvedUser | None = None) -> dict[str, Any]:
         from app.services import password_vault
 
         self._reload()
         user = self._get_user(user_id)
         if not user:
             raise ValueError("user_not_found")
+        self._guard_owner_record(actor, user)
         if not user.get("employee_id"):
             raise ValueError("not_employee_account")
         return {

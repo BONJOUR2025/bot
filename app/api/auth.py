@@ -115,8 +115,8 @@ def create_auth_router(service: AccessControlService | None = None) -> APIRouter
     async def access_config(
         user: ResolvedUser = Depends(require_permission("access")),
     ) -> AccessConfigResponse:
-        users = [UserOut(**item) for item in service.list_users()]
-        roles = [RoleOut(**item) for item in service.list_roles()]
+        users = [UserOut(**item) for item in service.list_users(actor=user)]
+        roles = [RoleOut(**item) for item in service.list_roles(actor=user)]
         return AccessConfigResponse(
             users=users,
             roles=roles,
@@ -155,7 +155,7 @@ def create_auth_router(service: AccessControlService | None = None) -> APIRouter
         user: ResolvedUser = Depends(require_permission("access")),
     ) -> dict[str, str]:
         try:
-            service.delete_role(role_id)
+            service.delete_role(role_id, actor=user)
         except ValueError as exc:
             _handle_error(exc)
         return {"status": "deleted"}
@@ -247,7 +247,7 @@ def create_auth_router(service: AccessControlService | None = None) -> APIRouter
     ) -> dict:
         """Текущий пароль учётки сотрудника — каждый просмотр пишется в журнал."""
         try:
-            data = service.reveal_password(user_id)
+            data = service.reveal_password(user_id, actor=user)
         except ValueError as exc:
             _handle_error(exc)
         log_connection(f"Просмотр пароля учётки {data.get('login')} — {user.login} ({user.display_name})")
@@ -258,7 +258,10 @@ def create_auth_router(service: AccessControlService | None = None) -> APIRouter
         user_id: str,
         user: ResolvedUser = Depends(require_permission("access")),
     ) -> dict[str, str]:
-        service.delete_user(user_id)
+        try:
+            service.delete_user(user_id, actor=user)
+        except ValueError as exc:
+            _handle_error(exc)
         return {"status": "deleted"}
 
     return router

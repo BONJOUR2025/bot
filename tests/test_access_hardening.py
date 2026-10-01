@@ -266,6 +266,11 @@ def test_push_subscription_only_for_self_or_admin():
 # require_permission сюда попадёт только осознанно.
 AUTH_ONLY_REVIEWED = {
     "GET /api/auth/me",
+    # Смена своего пароля: только себе, старый пароль обязателен.
+    "POST /api/auth/me/password",
+    # Свой KPI менеджера и привязка своего Telegram мастером — только о себе.
+    "GET /api/managers/me/kpi",
+    "GET /api/masters/me/telegram",
     # Карточки: список и чтение фильтруются областью, себе — PATCH /self и фото.
     "GET /api/employees/",
     "GET /api/employees/{employee_id}",
@@ -288,7 +293,6 @@ AUTH_ONLY_REVIEWED = {
     "GET /api/payouts/",
     "GET /api/payouts",
     "POST /api/payouts/",
-    "GET /api/payouts/active",
     "GET /api/payouts/unconfirmed",
     "GET /api/payouts/export.pdf",
     # Чтение своих отпусков, заявок, штрафов, имущества; правка — с правами.
