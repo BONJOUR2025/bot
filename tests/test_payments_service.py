@@ -29,12 +29,12 @@ class _Con:
 def test_payments_split(monkeypatch):
     rows = [
         # doc_type, dep_src_id, count, debet, kredit
-        (9, 8, 10, 65969.0, 0.0),
-        (31, 8, 2, 5500.0, 0.0),
-        (3, 1, 1, 23900.0, 200.0),   # центральная касса — наличные, офис
-        (9, 7, 3, 1000.0, 560.0),    # возврат по карте
-        (91, 8, 3, 2011.0, 0.0),     # бонусы — не деньги
-        (4, 13, 1, 5000.0, 0.0),     # безнал по счёту
+        (9, 8, 10, 65969.0, 0.0, date(2026, 9, 30)),
+        (31, 8, 2, 5500.0, 0.0, date(2026, 9, 30)),
+        (3, 1, 1, 23900.0, 200.0, date(2026, 9, 30)),   # центральная касса — наличные, офис
+        (9, 7, 3, 1000.0, 560.0, date(2026, 9, 30)),    # возврат по карте
+        (91, 8, 3, 2011.0, 0.0, date(2026, 9, 30)),     # бонусы — не деньги
+        (4, 13, 1, 5000.0, 0.0, date(2026, 9, 30)),     # безнал по счёту
     ]
     import app.services.firebird_service as fb
     monkeypatch.setattr(fb, "_connect", lambda: _Con(rows))
@@ -54,3 +54,4 @@ def test_payments_split(monkeypatch):
     assert pts["Гранд Палас"]["money"] == 440
     assert r["points"][-1]["name"] == "Офис / другое"
     assert pts["Офис / другое"]["money"] == 23700 + 5000
+    assert len(r["days"]) == 1 and r["days"][0]["money"] == r["net"] and r["days"][0]["bonus"] == 2011

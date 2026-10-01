@@ -9,7 +9,7 @@ import {
   Hammer, TrendingUp, ListTodo, KeyRound, Send, LibraryBig, Truck,
   Clock, Replace, CalendarOff, MessageCircle, Users2, Sun, Moon, Monitor,
   Landmark, UserSearch, UserCog, SlidersHorizontal, Scan, Headphones, Search,
-  Smartphone, Factory, ScanBarcode,
+  Smartphone, Factory, ScanBarcode, Wallet,
 } from 'lucide-react';
 
 import { useAuth } from '../providers/AuthProvider.jsx';
@@ -81,6 +81,7 @@ const navStructure = [
       { to: '/admin/incentives',       label: 'Штрафы и премии',      permission: 'incentives',      icon: Award },
       { to: '/admin/cash-moves',       label: 'Кассовые перемещения', permission: 'cash-moves',      icon: ArrowLeftRight },
       { to: '/admin/cash-summary',     label: 'Сводный отчёт (касса)', permission: 'cash-moves',     icon: BarChart2 },
+      { to: '/admin/payments',         label: 'Оплаты',               permission: 'payroll',         icon: Wallet },
       { to: '/admin/receivables',      label: 'Дебиторка',            permission: 'payroll',         icon: Landmark },
       { to: '/admin/payment-calendar', label: 'Платежный календарь',  permission: 'payment-calendar',icon: CalendarDays },
     ],

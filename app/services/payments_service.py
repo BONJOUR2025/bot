@@ -47,9 +47,9 @@ def payments(date_from: date, date_to: date) -> dict[str, Any]:
     try:
         cur = con.cursor()
         cur.execute(
-            "SELECT p.doc_type, d.dep_src_id, COUNT(*), SUM(d.debet), SUM(d.kredit) "
+            "SELECT p.doc_type, d.dep_src_id, COUNT(*), SUM(d.debet), SUM(d.kredit), d.doc_date "
             "FROM doc_order_pays p JOIN docs d ON d.doc_id = p.doc_id "
-            "WHERE d.doc_date BETWEEN ? AND ? GROUP BY p.doc_type, d.dep_src_id",
+            "WHERE d.doc_date BETWEEN ? AND ? GROUP BY p.doc_type, d.dep_src_id, d.doc_date",
             (date_from, date_to))
         rows = cur.fetchall()
     finally:
@@ -57,7 +57,8 @@ def payments(date_from: date, date_to: date) -> dict[str, Any]:
 
     kinds: dict[str, dict[str, Any]] = {}
     points: dict[str, dict[str, Any]] = {}
-    for doc_type, dep, count, debet, kredit in rows:
+    days: dict[str, dict[str, Any]] = {}
+    for doc_type, dep, count, debet, kredit, doc_date in rows:
         key = KINDS.get(doc_type, ("other", "Другое", True))[0]
         income, refund = round(float(debet or 0), 2), round(float(kredit or 0), 2)
         k = kinds.setdefault(key, {"key": key, "label": KIND_LABELS[key], "money": key in MONEY_KINDS,
@@ -67,8 +68,15 @@ def payments(date_from: date, date_to: date) -> dict[str, Any]:
         k["amount"] += income
         k["refunds"] += refund
         k["count"] += int(count or 0)
+        day = doc_date.isoformat() if hasattr(doc_date, "isoformat") else str(doc_date)
+        dd = days.setdefault(day, {"date": day, "money": 0.0, "card": 0.0, "cash": 0.0, "bank": 0.0,
+                                   "other": 0.0, "bonus": 0.0, "deposit": 0.0, "refunds": 0.0})
         if key not in MONEY_KINDS:
+            dd[key] += income
             continue
+        dd[key] += income
+        dd["refunds"] += refund
+        dd["money"] += income - refund
         name = POINT_NAMES.get(dep, OTHER_POINT)
         pt = points.setdefault(name, {"name": name, "money": 0.0, "card": 0.0, "cash": 0.0, "bank": 0.0,
                                       "other": 0.0, "refunds": 0.0})
@@ -84,6 +92,11 @@ def payments(date_from: date, date_to: date) -> dict[str, Any]:
     for p in point_list:
         for f in ("money", "card", "cash", "bank", "other", "refunds"):
             p[f] = round(p[f], 2)
+    day_list = sorted(days.values(), key=lambda d: d["date"], reverse=True)
+    for d in day_list:
+        for f in list(d):
+            if f != "date":
+                d[f] = round(d[f], 2)
     money = [k for k in kind_list if k["money"]]
     received = round(sum(k["amount"] for k in money), 2)
     refunds = round(sum(k["refunds"] for k in money), 2)
@@ -100,4 +113,5 @@ def payments(date_from: date, date_to: date) -> dict[str, Any]:
         "count": sum(k["count"] for k in money),
         "kinds": kind_list,
         "points": point_list,
+        "days": day_list,
     }

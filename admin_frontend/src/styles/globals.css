@@ -8227,3 +8227,21 @@ button:hover > .vac-desc { color: var(--color-text); }
 /* Дашборд → Оплаты: итоговая строка «Чистый плюс» в разбивке. */
 .fui-breakdown__row.pay-net { border-top: 1px solid var(--color-border); padding-top: 6px; margin-top: 2px; }
 .fui-breakdown__row.pay-net .fui-breakdown__k, .fui-breakdown__row.pay-net .fui-breakdown__v { font-weight: 700; color: var(--color-text); }
+
+/* Страница «Оплаты». */
+.pay-stats { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; }
+.pay-stat { padding: 14px 16px; display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.pay-stat__k { display: flex; align-items: center; gap: 6px; font-size: .75rem; letter-spacing: .04em; text-transform: uppercase; color: var(--color-muted-foreground, var(--color-text-muted)); }
+.pay-stat__v { font-size: 1.45rem; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--color-text); }
+.pay-stat__s { font-size: .78rem; color: var(--color-muted-foreground, var(--color-text-muted)); }
+.pay-stat--muted .pay-stat__v { color: var(--color-muted-foreground, var(--color-text-muted)); }
+.pay-stat--neg .pay-stat__v, .pay-neg { color: var(--color-danger); }
+.pay-stat--net { border: 1.5px solid color-mix(in srgb, var(--color-success) 55%, transparent); }
+.pay-stat--net .pay-stat__v { color: var(--color-success); }
+.pay-muted { color: var(--color-muted-foreground, var(--color-text-muted)); }
+.pay-chip { padding: 4px 12px; border-radius: 999px; font-size: .78rem; border: 1px solid var(--color-border); background: transparent; color: var(--color-text); cursor: pointer; }
+.pay-chip:hover { border-color: var(--color-primary); color: var(--color-primary); }
+.pay-chip.is-on { background: var(--color-primary); border-color: var(--color-primary); color: #fff; }
+.pay-date { display: flex; align-items: center; gap: 6px; font-size: .82rem; color: var(--color-muted-foreground, var(--color-text-muted)); }
+.pay-date .input { width: auto; padding-block: 6px; }
+@media (max-width: 1100px) { .pay-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); } .pay-stat--net { grid-column: 1 / -1; } }

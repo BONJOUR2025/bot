@@ -81,6 +81,7 @@ const CashSummary = lazy(() => import("./pages/CashSummary"));
 const PaymentCalendar = lazy(() => import("./pages/PaymentCalendar"));
 const Smses = lazy(() => import("./pages/Smses"));
 const Receivables = lazy(() => import("./pages/Receivables"));
+const Payments = lazy(() => import("./pages/Payments"));
 const Clients = lazy(() => import("./pages/Clients"));
 const Recruitment = lazy(() => import("./pages/Recruitment"));
 const VisitorCounters = lazy(() => import("./pages/VisitorCounters"));
@@ -180,6 +181,7 @@ export default function App() {
                 <Route path="cash-moves" element={<CashMovements />} />
                 <Route path="cash-summary" element={<CashSummary />} />
                 <Route path="receivables" element={<Receivables />} />
+                <Route path="payments" element={<Payments />} />
                 <Route path="clients" element={<Clients />} />
                 <Route path="payment-calendar" element={<PaymentCalendar />} />
                 <Route path="smses" element={<Smses />} />
