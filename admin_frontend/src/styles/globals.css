@@ -6119,10 +6119,11 @@ body.viewer3d-fs-active .app-card {
 .fui-band {
   position: relative;
   display: grid;
-  /* 17rem, а не 19: при трёх показаниях и типовой ширине контента ноутбука
-     (1280px экрана = ~908px под полосой) 19rem не давали третьей ячейке
-     встать в ряд, и она переносилась вниз, оставляя половину ряда пустой. */
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 17rem), 1fr));
+  /* 13rem: при четырёх показаниях и типовой ширине контента ноутбука
+     (1280px экрана = ~908px под полосой) 17rem не давали четвёртой ячейке
+     встать в ряд, и она переносилась вниз одна. Кегль суммы подстраивается
+     под ширину ячейки (container query у .fui-band__cell). */
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 13rem), 1fr));
   border-top: 1px solid var(--fui-edge-strong);
   border-bottom: 1px solid var(--fui-edge);
   isolation: isolate;
@@ -6172,7 +6173,7 @@ body.viewer3d-fs-active .app-card {
    плотная трекинг-настройка, а не жир. */
 .fui-band__v {
   font-size: clamp(2rem, 4.4vw, 4.4rem);
-  font-size: clamp(1.9rem, 16cqi, 4.4rem);
+  font-size: clamp(1.6rem, 16cqi, 4.4rem);
   font-weight: 250;
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
