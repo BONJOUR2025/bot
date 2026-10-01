@@ -16,6 +16,9 @@ import { breakableNumber } from '../utils/metricValue.js';
 // --color-warning и обычная строка читалась как предупреждение.
 const SALES_COLORS = { repair: 'var(--fui-cat-1)', cosmetics: 'var(--fui-cat-2)', shoes: 'var(--fui-cat-3)' };
 const SALES_LABELS = { repair: 'Ремонт', cosmetics: 'Косметика', shoes: 'Обувь' };
+// Виды оплаты — деньги, пришедшие сегодня (не выручка). Порядок цветов
+// фиксирован по виду, а не по сумме: карта всегда первым цветом.
+const PAY_COLORS = { card: 'var(--fui-cat-1)', cash: 'var(--fui-cat-2)', bank: 'var(--fui-cat-3)', other: 'var(--fui-cat-4, var(--color-text-muted))' };
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
@@ -364,6 +367,7 @@ export default function Dashboard() {
   const [cashBalances, setCashBalances] = useState(null);
   const [visitorSummary, setVisitorSummary] = useState(null);
   const [receivables, setReceivables] = useState(null);
+  const [payments, setPayments] = useState(null);
   // Состояние канала данных: сколько источников ответило, за сколько и когда.
   const [link, setLink] = useState(null);
   /* Один проход света по всей панели после обновления — ровно один
@@ -382,7 +386,7 @@ export default function Dashboard() {
       const today = new Date().toISOString().slice(0, 10);
       const [
         pendRes, vacRes, taskRes, bdRes, mastersRes, salesRes, notifRes,
-        shiftRes, leaveRes, cashRes, visitorRes, receivablesRes,
+        shiftRes, leaveRes, cashRes, visitorRes, receivablesRes, paymentsRes,
       ] = await Promise.allSettled([
         api.get('payouts/active'),
         api.get('vacations/active'),
@@ -396,6 +400,7 @@ export default function Dashboard() {
         api.get('cash-moves/balances'),
         api.get('visitor-events/summary', { params: { date_from: today, date_to: today } }),
         api.get('sales/receivables'),
+        api.get('sales/payments', { params: { date_from: today, date_to: today } }),
       ]);
       if (pendRes.status === 'fulfilled') {
         const all = pendRes.value.data ?? [];
@@ -415,9 +420,10 @@ export default function Dashboard() {
       if (cashRes.status === 'fulfilled') setCashBalances(cashRes.value.data ?? []);
       if (visitorRes.status === 'fulfilled') setVisitorSummary(visitorRes.value.data ?? []);
       if (receivablesRes.status === 'fulfilled') setReceivables(receivablesRes.value.data ?? null);
+      if (paymentsRes.status === 'fulfilled') setPayments(paymentsRes.value.data ?? null);
       const results = [
         pendRes, vacRes, taskRes, bdRes, mastersRes, salesRes, notifRes,
-        shiftRes, leaveRes, cashRes, visitorRes, receivablesRes,
+        shiftRes, leaveRes, cashRes, visitorRes, receivablesRes, paymentsRes,
       ];
       setSweep((n) => n + 1);
       setLink({
@@ -494,7 +500,10 @@ export default function Dashboard() {
   const topSalesCategory = salesDonut.length
     ? salesDonut.reduce((a, b) => (b.value > a.value ? b : a))
     : null;
-  const bandNodes = [cashBalances, sales, receivables].filter(Boolean).length;
+  const bandNodes = [cashBalances, sales, payments, receivables].filter(Boolean).length;
+  const payMoney = (payments?.kinds || []).filter((k) => k.money && k.amount);
+  const payOther = (payments?.kinds || []).filter((k) => !k.money && k.amount);
+  const payKind = (key) => payMoney.find((k) => k.key === key)?.amount || 0;
 
   // ── masters aggregation (unchanged from prior logic) ──
   let topMasters = [];
@@ -803,7 +812,7 @@ export default function Dashboard() {
               весомые числа дня оказывались под сгибом, легче, чем реестр
               продаж над ними. */}
           {/* business snapshot: cash on hand, outstanding receivables */}
-          {(cashBalances || receivables || sales) && (
+          {(cashBalances || receivables || sales || payments) && (
             <div className="space-y-3">
               <div className="fui-section">
                 <span className="fui-section__label">Обзор бизнеса</span>
@@ -836,6 +845,15 @@ export default function Dashboard() {
                     </span>
                   </button>
                 )}
+                {payments && (
+                  <div className="fui-band__cell">
+                    <span className="fui-band__k">Оплаты сегодня</span>
+                    <span className="fui-band__v">{fmt(Math.round(payments.total))}<small>₽</small></span>
+                    <span className="fui-band__m">
+                      <span>картой {fmt(Math.round(payKind('card')))} · наличными {fmt(Math.round(payKind('cash')))}</span>
+                    </span>
+                  </div>
+                )}
                 {receivables && (
                   <button
                     type="button"
@@ -857,6 +875,72 @@ export default function Dashboard() {
                 )}
               </div>
             </div>
+          )}
+
+          {/* payments today: деньги по видам оплаты и точкам — не выручка */}
+          {payments && (
+            <BentoCard eyebrow="Деньги" title="Оплаты сегодня">
+              {!payments.count ? (
+                <Empty text="Сегодня оплат ещё не было" icon={Scissors} />
+              ) : (
+                <>
+                  <div className="mb-4 flex items-center gap-5 border-b border-[color:var(--color-border)] pb-4">
+                    <div className="fui-donut" style={{ width: 104, height: 104 }}>
+                      <ResponsiveContainer width="100%" height="100%">
+                        <PieChart>
+                          <Pie data={payMoney} dataKey="amount" nameKey="label" innerRadius="66%" outerRadius="92%" paddingAngle={2} isAnimationActive={false}>
+                            {payMoney.map((k) => <Cell key={k.key} fill={PAY_COLORS[k.key]} stroke="none" />)}
+                          </Pie>
+                          <Tooltip formatter={(v, n) => [`${fmt(Math.round(v))} ₽`, n]} />
+                        </PieChart>
+                      </ResponsiveContainer>
+                      <span className="fui-donut__core">
+                        <span className="fui-donut__v">{compactMoney(payments.total)}</span>
+                        <span className="fui-donut__k">Пришло</span>
+                      </span>
+                    </div>
+                    <div className="fui-breakdown">
+                      {payMoney.map((k) => (
+                        <div key={k.key} className="fui-breakdown__row" style={{ '--cat': PAY_COLORS[k.key] }}>
+                          <span className="fui-breakdown__sw" />
+                          <span className="fui-breakdown__k">{k.label}</span>
+                          <span className="fui-breakdown__v">{fmt(Math.round(k.amount))} ₽</span>
+                          <span className="fui-breakdown__p">{sharePct(k.amount, payments.total)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="fui-ledger">
+                    {payments.points.map((p) => (
+                      <div key={p.name} className="fui-ledger__row">
+                        <span className="fui-ledger__name">{p.name}</span>
+                        <span className="fui-ledger__n" style={{ '--cat': PAY_COLORS.card }}>
+                          <b>К</b>{p.card ? fmt(Math.round(p.card)) : '—'}
+                        </span>
+                        <span className="fui-ledger__n" style={{ '--cat': PAY_COLORS.cash }}>
+                          <b>Н</b>{p.cash ? fmt(Math.round(p.cash)) : '—'}
+                        </span>
+                        <span className="fui-ledger__n" style={{ '--cat': PAY_COLORS.bank }}>
+                          <b>С</b>{p.bank ? fmt(Math.round(p.bank)) : '—'}
+                        </span>
+                        <span className="fui-ledger__total">{fmt(Math.round(p.money))} ₽</span>
+                        <span className="fui-ledger__share" style={{ width: payments.total ? `${(p.money / payments.total) * 100}%` : 0 }} />
+                      </div>
+                    ))}
+                    <div className="fui-ledger__foot">
+                      <span className="fui-ledger__foot-k">Итого деньгами</span>
+                      <span className="fui-ledger__foot-v">{fmt(Math.round(payments.total))} ₽</span>
+                    </div>
+                  </div>
+                  <p className="pt-2.5 text-xs text-[color:var(--color-text-faint)]">
+                    К — картой, Н — наличными, С — безнал по счёту. Точка — где приняли оплату.
+                    {payments.refunds > 0 && ` Возвраты ${fmt(Math.round(payments.refunds))} ₽ уже вычтены.`}
+                    {payOther.length > 0 && ` Не деньги: ${payOther.map((k) => `${k.label.toLowerCase()} ${fmt(Math.round(k.amount))} ₽`).join(', ')}.`}
+                  </p>
+                </>
+              )}
+            </BentoCard>
           )}
 
           {/* sales today */}

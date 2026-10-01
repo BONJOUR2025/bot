@@ -129,6 +129,22 @@ def create_sales_router() -> APIRouter:
         except Exception as exc:
             raise HTTPException(status_code=500, detail=str(exc))
 
+    @router.get("/payments")
+    async def get_payments(
+        date_from: Optional[date] = Query(default=None),
+        date_to: Optional[date] = Query(default=None),
+    ):
+        """Деньги, полученные за период, по видам оплаты и точкам (не выручка)."""
+        from app.services.firebird_service import run_with_timeout
+        from app.services.payments_service import payments
+
+        today = date.today()
+        df, dt = _resolve_range(date_from or today, date_to or today)
+        try:
+            return await run_with_timeout(payments, df, dt)
+        except asyncio.TimeoutError:
+            raise HTTPException(status_code=504, detail="Запрос выполняется слишком долго. Попробуйте ещё раз.")
+
     @router.get("/receivables")
     async def get_receivables(
         date_from: Optional[date] = Query(default=None),
