@@ -3,7 +3,7 @@ from telegram.ext import ContextTypes
 from ...utils.logger import log, log_connection
 from ...config import ADMIN_ID
 from ...data.bot_user_repository import get_bot_user_repository
-from .home import get_user_info_user
+from .home import get_user_info_user, reply_waiting_link
 from ...services.users import load_users_map
 from ..admin import admin
 
@@ -25,11 +25,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         )
         if requested and str(user.id) not in load_users_map():
             log_connection(f"Bot: /start from {user.id} ({username}) по ссылке из кабинета, сотрудник {requested}")
-            if update.message:
-                await update.message.reply_text(
-                    "✅ Бот запущен. Администратор привяжет его к вашему профилю — "
-                    "после этого сюда будут приходить уведомления о заказах и работе."
-                )
+            await reply_waiting_link(update)
             return
         log_connection(f"Bot: /start from {user.id} ({username})")
     try:
