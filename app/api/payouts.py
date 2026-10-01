@@ -265,7 +265,11 @@ def create_payout_router(
         raise HTTPException(status_code=404, detail="not found")
 
     @router.get("/active", response_model=list[Payout])
-    async def list_active_payouts(current: ResolvedUser = Depends(get_current_user)):
+    async def list_active_payouts(
+        current: ResolvedUser = Depends(require_permission(PAYOUTS_PERMISSION)),
+    ):
+        # Раньше хватало любого входа — и на дашборде учётки без права
+        # «Выплаты» (подбор персонала) были видны чужие зарплатные выплаты.
         rows = await service.list_active_payouts()
         return _filter_visible(rows, current)
 
