@@ -62,14 +62,18 @@ def payments(date_from: date, date_to: date) -> dict[str, Any]:
         income, refund = round(float(debet or 0), 2), round(float(kredit or 0), 2)
         k = kinds.setdefault(key, {"key": key, "label": KIND_LABELS[key], "money": key in MONEY_KINDS,
                                    "amount": 0.0, "refunds": 0.0, "count": 0})
-        k["amount"] += income - refund
+        # amount — сколько пришло этим видом оплаты (без вычета возвратов):
+        # возвраты показываем отдельной строкой, чтобы их было видно.
+        k["amount"] += income
         k["refunds"] += refund
         k["count"] += int(count or 0)
         if key not in MONEY_KINDS:
             continue
         name = POINT_NAMES.get(dep, OTHER_POINT)
-        pt = points.setdefault(name, {"name": name, "money": 0.0, "card": 0.0, "cash": 0.0, "bank": 0.0, "other": 0.0})
-        pt[key] += income - refund
+        pt = points.setdefault(name, {"name": name, "money": 0.0, "card": 0.0, "cash": 0.0, "bank": 0.0,
+                                      "other": 0.0, "refunds": 0.0})
+        pt[key] += income
+        pt["refunds"] += refund
         pt["money"] += income - refund
 
     kind_list = sorted(kinds.values(), key=lambda k: KIND_ORDER.index(k["key"]))
@@ -78,14 +82,21 @@ def payments(date_from: date, date_to: date) -> dict[str, Any]:
         k["refunds"] = round(k["refunds"], 2)
     point_list = sorted(points.values(), key=lambda p: (p["name"] == OTHER_POINT, -p["money"]))
     for p in point_list:
-        for f in ("money", "card", "cash", "bank", "other"):
+        for f in ("money", "card", "cash", "bank", "other", "refunds"):
             p[f] = round(p[f], 2)
     money = [k for k in kind_list if k["money"]]
+    received = round(sum(k["amount"] for k in money), 2)
+    refunds = round(sum(k["refunds"] for k in money), 2)
     return {
         "date_from": date_from.isoformat(),
         "date_to": date_to.isoformat(),
-        "total": round(sum(k["amount"] for k in money), 2),
-        "refunds": round(sum(k["refunds"] for k in money), 2),
+        # Пришло деньгами (наличные, карта, безнал) — до возвратов.
+        "received": received,
+        "refunds": refunds,
+        # Чистый плюс: пришло деньгами минус возвраты. Бонусы и депозит
+        # сюда не входят — это не деньги.
+        "net": round(received - refunds, 2),
+        "total": round(received - refunds, 2),
         "count": sum(k["count"] for k in money),
         "kinds": kind_list,
         "points": point_list,

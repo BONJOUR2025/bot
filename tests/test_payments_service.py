@@ -41,14 +41,16 @@ def test_payments_split(monkeypatch):
 
     r = payments_service.payments(date(2026, 9, 30), date(2026, 9, 30))
     kinds = {k["key"]: k for k in r["kinds"]}
-    assert kinds["card"]["amount"] == 65969 + 440
-    assert kinds["cash"]["amount"] == 5500 + 23700
+    assert kinds["card"]["amount"] == 65969 + 1000
+    assert kinds["cash"]["amount"] == 5500 + 23900
     assert kinds["bank"]["amount"] == 5000
     assert kinds["bonus"]["money"] is False and kinds["bonus"]["amount"] == 2011
-    assert r["total"] == 65969 + 440 + 5500 + 23700 + 5000
+    assert r["received"] == 65969 + 1000 + 5500 + 23900 + 5000
     assert r["refunds"] == 760
+    assert r["net"] == r["total"] == r["received"] - 760
     pts = {p["name"]: p for p in r["points"]}
     assert pts["Бестужевская"]["money"] == 71469 and pts["Бестужевская"]["cash"] == 5500
-    assert pts["Гранд Палас"]["card"] == 440
+    assert pts["Гранд Палас"]["card"] == 1000 and pts["Гранд Палас"]["refunds"] == 560
+    assert pts["Гранд Палас"]["money"] == 440
     assert r["points"][-1]["name"] == "Офис / другое"
     assert pts["Офис / другое"]["money"] == 23700 + 5000

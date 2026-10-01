@@ -504,6 +504,8 @@ export default function Dashboard() {
   const payMoney = (payments?.kinds || []).filter((k) => k.money && k.amount);
   const payOther = (payments?.kinds || []).filter((k) => !k.money && k.amount);
   const payKind = (key) => payMoney.find((k) => k.key === key)?.amount || 0;
+  const payBonus = (payments?.kinds || []).find((k) => k.key === 'bonus')?.amount || 0;
+  const payNet = payments ? (payments.net ?? payments.total) : 0;
 
   // ── masters aggregation (unchanged from prior logic) ──
   let topMasters = [];
@@ -847,10 +849,10 @@ export default function Dashboard() {
                 )}
                 {payments && (
                   <div className="fui-band__cell">
-                    <span className="fui-band__k">Оплаты сегодня</span>
-                    <span className="fui-band__v">{fmt(Math.round(payments.total))}<small>₽</small></span>
+                    <span className="fui-band__k">Оплаты сегодня · чистый плюс</span>
+                    <span className="fui-band__v">{fmt(Math.round(payNet))}<small>₽</small></span>
                     <span className="fui-band__m">
-                      <span>картой {fmt(Math.round(payKind('card')))} · наличными {fmt(Math.round(payKind('cash')))}</span>
+                      <span>нал {fmt(Math.round(payKind('cash')))} · карта {fmt(Math.round(payKind('card')))}{payments.refunds ? ` · возвр. −${fmt(Math.round(payments.refunds))}` : ''}</span>
                     </span>
                   </div>
                 )}
@@ -895,19 +897,39 @@ export default function Dashboard() {
                         </PieChart>
                       </ResponsiveContainer>
                       <span className="fui-donut__core">
-                        <span className="fui-donut__v">{compactMoney(payments.total)}</span>
-                        <span className="fui-donut__k">Пришло</span>
+                        <span className="fui-donut__v">{compactMoney(payNet)}</span>
+                        <span className="fui-donut__k">Чистый плюс</span>
                       </span>
                     </div>
                     <div className="fui-breakdown">
-                      {payMoney.map((k) => (
+                      {['cash', 'card', 'bank', 'other'].map((key) => payMoney.find((k) => k.key === key)).filter(Boolean).map((k) => (
                         <div key={k.key} className="fui-breakdown__row" style={{ '--cat': PAY_COLORS[k.key] }}>
                           <span className="fui-breakdown__sw" />
                           <span className="fui-breakdown__k">{k.label}</span>
                           <span className="fui-breakdown__v">{fmt(Math.round(k.amount))} ₽</span>
-                          <span className="fui-breakdown__p">{sharePct(k.amount, payments.total)}</span>
+                          <span className="fui-breakdown__p">{sharePct(k.amount, payments.received ?? payments.total)}</span>
                         </div>
                       ))}
+                      {payBonus > 0 && (
+                        <div className="fui-breakdown__row" style={{ '--cat': 'var(--color-text-faint)' }}>
+                          <span className="fui-breakdown__sw" />
+                          <span className="fui-breakdown__k">Бонусами · не деньги</span>
+                          <span className="fui-breakdown__v">{fmt(Math.round(payBonus))} ₽</span>
+                          <span className="fui-breakdown__p" />
+                        </div>
+                      )}
+                      <div className="fui-breakdown__row" style={{ '--cat': 'var(--color-danger)' }}>
+                        <span className="fui-breakdown__sw" />
+                        <span className="fui-breakdown__k">Возвраты</span>
+                        <span className="fui-breakdown__v">{payments.refunds ? `−${fmt(Math.round(payments.refunds))}` : '0'} ₽</span>
+                        <span className="fui-breakdown__p" />
+                      </div>
+                      <div className="fui-breakdown__row pay-net" style={{ '--cat': 'var(--color-success)' }}>
+                        <span className="fui-breakdown__sw" />
+                        <span className="fui-breakdown__k">Чистый плюс</span>
+                        <span className="fui-breakdown__v">{fmt(Math.round(payNet))} ₽</span>
+                        <span className="fui-breakdown__p" />
+                      </div>
                     </div>
                   </div>
 
@@ -915,28 +937,29 @@ export default function Dashboard() {
                     {payments.points.map((p) => (
                       <div key={p.name} className="fui-ledger__row">
                         <span className="fui-ledger__name">{p.name}</span>
-                        <span className="fui-ledger__n" style={{ '--cat': PAY_COLORS.card }}>
-                          <b>К</b>{p.card ? fmt(Math.round(p.card)) : '—'}
-                        </span>
                         <span className="fui-ledger__n" style={{ '--cat': PAY_COLORS.cash }}>
                           <b>Н</b>{p.cash ? fmt(Math.round(p.cash)) : '—'}
                         </span>
-                        <span className="fui-ledger__n" style={{ '--cat': PAY_COLORS.bank }}>
-                          <b>С</b>{p.bank ? fmt(Math.round(p.bank)) : '—'}
+                        <span className="fui-ledger__n" style={{ '--cat': PAY_COLORS.card }}>
+                          <b>К</b>{p.card ? fmt(Math.round(p.card)) : '—'}
+                        </span>
+                        <span className="fui-ledger__n" style={{ '--cat': 'var(--color-danger)' }}>
+                          <b>В</b>{p.refunds ? `−${fmt(Math.round(p.refunds))}` : '—'}
                         </span>
                         <span className="fui-ledger__total">{fmt(Math.round(p.money))} ₽</span>
-                        <span className="fui-ledger__share" style={{ width: payments.total ? `${(p.money / payments.total) * 100}%` : 0 }} />
+                        <span className="fui-ledger__share" style={{ width: payNet > 0 ? `${Math.max(0, (p.money / payNet) * 100)}%` : 0 }} />
                       </div>
                     ))}
                     <div className="fui-ledger__foot">
-                      <span className="fui-ledger__foot-k">Итого деньгами</span>
-                      <span className="fui-ledger__foot-v">{fmt(Math.round(payments.total))} ₽</span>
+                      <span className="fui-ledger__foot-k">Чистый плюс</span>
+                      <span className="fui-ledger__foot-v">{fmt(Math.round(payNet))} ₽</span>
                     </div>
                   </div>
                   <p className="pt-2.5 text-xs text-[color:var(--color-text-faint)]">
-                    К — картой, Н — наличными, С — безнал по счёту. Точка — где приняли оплату.
-                    {payments.refunds > 0 && ` Возвраты ${fmt(Math.round(payments.refunds))} ₽ уже вычтены.`}
-                    {payOther.length > 0 && ` Не деньги: ${payOther.map((k) => `${k.label.toLowerCase()} ${fmt(Math.round(k.amount))} ₽`).join(', ')}.`}
+                    Н — наличными, К — картой, В — возвраты; справа — чистый плюс точки. Точка — где приняли оплату.
+                    {payKind('bank') > 0 && ` Безнал по счёту: ${fmt(Math.round(payKind('bank')))} ₽ (в итоге учтён).`}
+                    {' '}Чистый плюс = пришло деньгами − возвраты; бонусы и депозит — не деньги и в него не входят.
+                    {payOther.filter((k) => k.key !== 'bonus').length > 0 && ` Депозитом: ${fmt(Math.round(payOther.filter((k) => k.key !== 'bonus').reduce((a, k) => a + k.amount, 0)))} ₽.`}
                   </p>
                 </>
               )}

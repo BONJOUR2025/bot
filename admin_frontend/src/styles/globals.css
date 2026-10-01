@@ -8223,3 +8223,7 @@ button:hover > .vac-desc { color: var(--color-text); }
 .nr-off { margin: 0; padding-left: 52px; display: flex; align-items: center; gap: 6px; font-size: .85rem; color: var(--color-muted-foreground, var(--color-text-muted)); }
 .nr-warn { font-size: .82rem; color: var(--color-danger); }
 @media (max-width: 640px) { .nr-recipients, .nr-off { padding-left: 0; } .nr-pick { width: 100%; } .nr-pick .input { flex: 1; width: auto; } }
+
+/* Дашборд → Оплаты: итоговая строка «Чистый плюс» в разбивке. */
+.fui-breakdown__row.pay-net { border-top: 1px solid var(--color-border); padding-top: 6px; margin-top: 2px; }
+.fui-breakdown__row.pay-net .fui-breakdown__k, .fui-breakdown__row.pay-net .fui-breakdown__v { font-weight: 700; color: var(--color-text); }
