@@ -6149,6 +6149,9 @@ body.viewer3d-fs-active .app-card {
   background: none;
   cursor: pointer;
   transition: background var(--fui-t-normal) var(--glass-ease-out);
+  /* Кегль суммы — от ширины ячейки, а не окна: с четвёртым показанием
+     («Оплаты сегодня») семизначные суммы рвались посередине числа. */
+  container-type: inline-size;
 }
 .fui-band__cell:first-child { border-left: 0; }
 .fui-band__cell:hover { background: color-mix(in srgb, var(--color-text) 3%, transparent); }
@@ -6168,8 +6171,10 @@ body.viewer3d-fs-active .app-card {
    приветствию. Начертание оставлено светлым: массу даёт размер и
    плотная трекинг-настройка, а не жир. */
 .fui-band__v {
-  font-size: clamp(2.6rem, 4.4vw, 4.4rem);
+  font-size: clamp(2rem, 4.4vw, 4.4rem);
+  font-size: clamp(1.9rem, 16cqi, 4.4rem);
   font-weight: 250;
+  white-space: nowrap;
   font-variant-numeric: tabular-nums;
   letter-spacing: -0.045em;
   line-height: 0.94;
