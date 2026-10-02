@@ -105,8 +105,7 @@ const navStructure = [
       { to: '/admin/passwords',      label: 'Пароли',      permission: 'passwords', icon: KeyRound },
       { to: '/admin/client-lk-password', label: 'Пароль клиента (ЛК)', permission: 'passwords', icon: Search },
       { to: '/admin/settings',       label: 'Настройки',   permission: 'settings',  icon: SettingsIcon },
-      // Без права: справка нужна всем, а что в ней видно — решает сервер.
-      { to: '/admin/help',           label: 'Помощь',      icon: LifeBuoy },
+      { to: '/admin/help',           label: 'Помощь',      permission: 'help', icon: LifeBuoy },
     ],
   },
 ];

@@ -346,10 +346,6 @@ AUTH_ONLY_REVIEWED = {
     "GET /api/masters/me/scan/mode",
     "POST /api/masters/me/scan/preview",
     "POST /api/masters/me/scan/confirm",
-    # «Помощь»: статьи режутся по правам пользователя, вопрос помощнику —
-    # только при наличии хоть одного права (app/api/help.py).
-    "GET /api/help/articles",
-    "POST /api/help/ask",
 }
 
 

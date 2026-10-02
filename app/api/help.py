@@ -1,7 +1,8 @@
 """Раздел «Помощь»: инструкции по панели и вопросы помощнику.
 
-Права отдельного нет — справка нужна всем, кто входит в панель. Что именно
-видно, решает admin_help_service по правам пользователя.
+Под правом «help»: пока раздел обкатывается, он открыт только владельцу
+(у него «*»), остальным выдаётся галочкой в «Настройки → Доступ». Какие
+статьи видно, дополнительно решает admin_help_service по правам пользователя.
 """
 from __future__ import annotations
 
@@ -14,7 +15,7 @@ from pydantic import BaseModel
 from app.services import admin_help_service as help_service
 from app.services.access_control_service import ResolvedUser
 
-from .dependencies import get_current_user
+from .dependencies import require_permission
 
 log = logging.getLogger(__name__)
 
@@ -33,15 +34,11 @@ def create_help_router() -> APIRouter:
     router = APIRouter(prefix="/help", tags=["help"])
 
     @router.get("/articles")
-    def articles(user: ResolvedUser = Depends(get_current_user)):
+    def articles(user: ResolvedUser = Depends(require_permission("help"))):
         return [a.public() for a in help_service.visible_articles(user.permissions)]
 
     @router.post("/ask")
-    async def ask(data: AskIn, user: ResolvedUser = Depends(get_current_user)):
-        # Аккаунт без единого права (сотрудник или мастер из личного кабинета)
-        # панелью не пользуется — тратить на него нейросеть незачем.
-        if not user.permissions:
-            raise HTTPException(403, "forbidden")
+    async def ask(data: AskIn, user: ResolvedUser = Depends(require_permission("help"))):
         question = (data.question or "").strip()
         if len(question) < 3:
             raise HTTPException(400, "Задайте вопрос подробнее.")
