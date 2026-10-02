@@ -22,6 +22,155 @@ export default function SettingsAiUsage() {
         </p>
         <EmployeeLlmUsagePanel />
       </Section>
+
+      <Section title="Помощь в админке">
+        <p className="text-sm text-[color:var(--color-muted-foreground)] -mt-2">
+          Сколько стоили вопросы помощнику на странице «Помощь». На каждый вопрос — проверка
+          «вопрос о работе в панели?» и, если проверка пройдена, сам ответ; отклонённые вопросы
+          стоят только проверку.
+        </p>
+        <HelpLlmUsagePanel />
+      </Section>
+    </div>
+  );
+}
+
+const HELP_PERIODS = [[1, '24 часа'], [7, '7 дней'], [30, '30 дней'], [0, 'Всё время']];
+
+function HelpLlmUsagePanel() {
+  const [days, setDays] = useState(30);
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [openIdx, setOpenIdx] = useState(null);
+
+  async function load(d = days) {
+    setLoading(true);
+    setError('');
+    try {
+      const res = await api.get('config/llm-usage/help', { params: { days: d } });
+      setData(res.data);
+      setOpenIdx(null);
+    } catch {
+      setError('Не удалось загрузить расход помощника');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => { load(days); }, [days]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Вопрос стоит копейки — с двумя знаками было бы «0.00 ₽».
+  const fmtRub = (v, digits = 2) => (v == null ? '—' : `${Number(v).toFixed(digits)} ₽`);
+  const fmtInt = (v) => Number(v || 0).toLocaleString('ru-RU');
+  const fmtDate = (v) => (v ? new Date(v).toLocaleString('ru-RU') : '—');
+
+  return (
+    <div>
+      <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+        <div className="flex flex-wrap gap-1.5">
+          {HELP_PERIODS.map(([d, label]) => (
+            <button key={d} type="button" onClick={() => setDays(d)}
+              className={`btn btn--sm ${days === d ? 'btn--primary' : 'btn--secondary'}`}>
+              {label}
+            </button>
+          ))}
+        </div>
+        <button type="button" onClick={() => load()} disabled={loading} className="btn btn--secondary">
+          {loading ? 'Обновление…' : 'Обновить'}
+        </button>
+      </div>
+      {error && <p className="text-sm text-red-500 mb-2">{error}</p>}
+      {data && data.questions === 0 && (
+        <p className="text-sm text-[color:var(--color-muted-foreground)]">За этот период вопросов помощнику не было.</p>
+      )}
+      {data && data.questions > 0 && (
+        <div className="space-y-4">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
+            <div className="rounded border border-[color:var(--color-border)] p-3">
+              <p className="text-[color:var(--color-muted-foreground)] mb-1">Потрачено</p>
+              <p className="font-mono text-base font-semibold">{fmtRub(data.cost_rub)}</p>
+              <p className="text-xs text-[color:var(--color-muted-foreground)] mt-1">
+                ответы {fmtRub(data.answer_cost_rub)} · проверки {fmtRub(data.filter_cost_rub)}
+              </p>
+            </div>
+            <div className="rounded border border-[color:var(--color-border)] p-3">
+              <p className="text-[color:var(--color-muted-foreground)] mb-1">Вопросов</p>
+              <p className="font-mono text-base font-semibold">{fmtInt(data.questions)}</p>
+              <p className="text-xs text-[color:var(--color-muted-foreground)] mt-1">
+                с ответом {fmtInt(data.answered)} · отклонено {fmtInt(data.rejected)}
+              </p>
+            </div>
+            <div className="rounded border border-[color:var(--color-border)] p-3">
+              <p className="text-[color:var(--color-muted-foreground)] mb-1">Цена вопроса</p>
+              <p className="font-mono text-base font-semibold">{fmtRub(data.avg_cost_rub, 3)}</p>
+              <p className="text-xs text-[color:var(--color-muted-foreground)] mt-1">в среднем</p>
+            </div>
+            <div className="rounded border border-[color:var(--color-border)] p-3">
+              <p className="text-[color:var(--color-muted-foreground)] mb-1">Токенов</p>
+              <p className="font-mono text-base font-semibold">{fmtInt(data.tokens)}</p>
+            </div>
+          </div>
+
+          {data.by_user.length > 0 && (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-left text-[color:var(--color-muted-foreground)]">
+                    <th className="pr-3 py-1 font-normal">Кто спрашивал</th>
+                    <th className="pr-3 py-1 font-normal text-right">Вопросов</th>
+                    <th className="pr-3 py-1 font-normal text-right">Отклонено</th>
+                    <th className="pr-3 py-1 font-normal text-right">Рублей</th>
+                    <th className="pr-3 py-1 font-normal">Последний вопрос</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {data.by_user.map((u) => (
+                    <tr key={u.employee_id} className="border-t border-[color:var(--color-border)]">
+                      <td className="pr-3 py-1">{u.employee_name}</td>
+                      <td className="pr-3 py-1 text-right font-mono">{fmtInt(u.questions)}</td>
+                      <td className="pr-3 py-1 text-right font-mono">{fmtInt(u.rejected)}</td>
+                      <td className="pr-3 py-1 text-right font-mono">{fmtRub(u.cost_rub)}</td>
+                      <td className="pr-3 py-1">{fmtDate(u.last_used_at)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          <div>
+            <p className="text-xs text-[color:var(--color-muted-foreground)] mb-2">
+              Последние вопросы (до 50) — нажмите, чтобы увидеть ответ.
+            </p>
+            <div className="space-y-1.5">
+              {data.recent.map((q, i) => {
+                const open = openIdx === i;
+                return (
+                  <div key={i} className="rounded border border-[color:var(--color-border)] text-sm">
+                    <button type="button" onClick={() => setOpenIdx(open ? null : i)}
+                      className="w-full flex flex-wrap items-baseline gap-x-3 gap-y-1 px-3 py-2 text-left hover:bg-[color:var(--color-bg-secondary)]">
+                      <span className="flex-1 min-w-[12rem]">{q.question || '—'}</span>
+                      <span className={`text-xs ${q.answered ? 'text-green-600' : 'text-[color:var(--color-muted-foreground)]'}`}>
+                        {q.answered ? 'ответ' : 'отклонён'}
+                      </span>
+                      <span className="font-mono text-xs">{fmtRub(q.cost_rub, 4)}</span>
+                      <span className="text-xs text-[color:var(--color-muted-foreground)]">
+                        {q.employee_name} · {fmtDate(q.created_at)}
+                      </span>
+                    </button>
+                    {open && (
+                      <div className="border-t border-[color:var(--color-border)] px-3 py-2 text-[color:var(--color-muted-foreground)] whitespace-pre-wrap">
+                        {q.answered ? q.answer : 'Фильтр решил, что вопрос не о работе в панели, — ответ не запрашивался.'}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -78,10 +78,24 @@ def create_config_router(service: ConfigService) -> APIRouter:
         which employee made a call)."""
         from datetime import datetime, timedelta
 
-        from app.services.llm_usage_service import get_usage_by_employee
+        from app.services.llm_usage_service import HELP_FEATURES, get_usage_by_employee
 
         since = datetime.utcnow() - timedelta(days=days) if days else None
-        return get_usage_by_employee(since=since, feature=feature)
+        # Вопросы к «Помощи» админки показываются своим блоком (/llm-usage/help),
+        # а не среди сотрудников, спрашивающих базу знаний в боте.
+        return get_usage_by_employee(since=since, feature=feature,
+                                     exclude_features=() if feature else HELP_FEATURES)
+
+    @router.get("/llm-usage/help")
+    async def llm_usage_help(days: int = 30):
+        """Сколько стоили вопросы помощнику на странице «Помощь»: итог,
+        по пользователям и последние вопросы с ценой каждого."""
+        from datetime import datetime, timedelta
+
+        from app.services.llm_usage_service import get_help_usage
+
+        since = datetime.utcnow() - timedelta(days=days) if days else None
+        return get_help_usage(since=since)
 
     @router.get("/llm-usage/by-employee/{employee_id}")
     async def llm_usage_employee_details(employee_id: str, days: int = 30,

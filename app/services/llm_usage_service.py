@@ -183,7 +183,8 @@ def get_employee_usage_details(employee_id: str, *, since: Optional[datetime] = 
         db.close()
 
 
-def get_usage_by_employee(since: Optional[datetime] = None, feature: Optional[str] = None) -> list[dict]:
+def get_usage_by_employee(since: Optional[datetime] = None, feature: Optional[str] = None,
+                          exclude_features: tuple[str, ...] = ()) -> list[dict]:
     """Per-employee totals, most expensive first. This is real-time in the
     sense that it reads whatever has been logged up to this instant — there
     is no batching/aggregation delay, each call writes its row immediately."""
@@ -208,6 +209,8 @@ def get_usage_by_employee(since: Optional[datetime] = None, feature: Optional[st
             q = q.filter(EmployeeLlmUsage.created_at >= since)
         if feature is not None:
             q = q.filter(EmployeeLlmUsage.feature == feature)
+        if exclude_features:
+            q = q.filter(~EmployeeLlmUsage.feature.in_(exclude_features))
         q = q.order_by(func.coalesce(func.sum(EmployeeLlmUsage.cost_rub), 0.0).desc())
 
         return [
@@ -225,3 +228,106 @@ def get_usage_by_employee(since: Optional[datetime] = None, feature: Optional[st
         ]
     finally:
         db.close()
+
+
+# ── «Помощь» в админке ────────────────────────────────────────────────
+HELP_FEATURES = ("admin_help", "admin_help_filter")
+# Разрыв между фильтром и ответом на один вопрос — секунды; минута с запасом
+# покрывает медленный ответ модели и не склеивает соседние вопросы.
+_HELP_PAIR_WINDOW_S = 120
+
+
+def _is_filter_row(r) -> bool:
+    # До разделения меток фильтр тоже писался как admin_help — его ответ
+    # всегда одно слово «ДА»/«НЕТ», по нему и отличаем старые строки.
+    if r.feature == "admin_help_filter":
+        return True
+    return (r.answer or "").strip().upper().rstrip(".") in ("ДА", "НЕТ")
+
+
+def get_help_usage(since: Optional[datetime] = None, recent_limit: int = 50) -> dict:
+    """Сколько стоили вопросы к помощнику на странице «Помощь».
+
+    На каждый вопрос — до двух вызовов: фильтр (дёшево, всегда) и ответ
+    (только если фильтр пропустил). Здесь они склеиваются обратно в вопросы,
+    чтобы цена считалась на вопрос, а не на вызов модели."""
+    from app.models.llm_usage import EmployeeLlmUsage
+
+    db = _session()
+    try:
+        q = db.query(EmployeeLlmUsage).filter(EmployeeLlmUsage.feature.in_(HELP_FEATURES))
+        if since is not None:
+            q = q.filter(EmployeeLlmUsage.created_at >= since)
+        rows = q.order_by(EmployeeLlmUsage.created_at.asc()).all()
+    finally:
+        db.close()
+
+    questions: list[dict] = []
+    open_by_user: dict[str, dict] = {}   # последний вопрос пользователя, ждущий ответа
+    for r in rows:
+        cost = float(r.cost_rub) if r.cost_rub is not None else 0.0
+        tokens = int(r.total_tokens or 0)
+        if _is_filter_row(r):
+            item = {
+                "employee_id": r.employee_id, "employee_name": r.employee_name or r.employee_id,
+                "created_at": r.created_at,
+                "question": (r.question or "").split("Последний вопрос:\n")[-1].strip(),
+                "answer": "", "passed": (r.answer or "").strip().upper().startswith("ДА"),
+                "answered": False, "cost_rub": cost, "filter_cost_rub": cost, "tokens": tokens,
+            }
+            questions.append(item)
+            open_by_user[r.employee_id] = item
+            continue
+        item = open_by_user.pop(r.employee_id, None)
+        if (item is None or item["answered"] or not r.created_at or not item["created_at"]
+                or (r.created_at - item["created_at"]).total_seconds() > _HELP_PAIR_WINDOW_S):
+            # Ответ без своего фильтра — считаем отдельным вопросом, чтобы
+            # ни один рубль не потерялся из итога.
+            item = {
+                "employee_id": r.employee_id, "employee_name": r.employee_name or r.employee_id,
+                "created_at": r.created_at, "question": r.question or "", "answer": "",
+                "passed": True, "answered": False, "cost_rub": 0.0, "filter_cost_rub": 0.0, "tokens": 0,
+            }
+            questions.append(item)
+        item["answered"] = True
+        item["answer"] = r.answer or ""
+        item["question"] = r.question or item["question"]
+        item["cost_rub"] += cost
+        item["tokens"] += tokens
+
+    total_cost = sum(qq["cost_rub"] for qq in questions)
+    filter_cost = sum(qq["filter_cost_rub"] for qq in questions)
+    answered = sum(1 for qq in questions if qq["answered"])
+    by_user: dict[str, dict] = {}
+    for qq in questions:
+        u = by_user.setdefault(qq["employee_id"], {
+            "employee_id": qq["employee_id"], "employee_name": qq["employee_name"],
+            "questions": 0, "answered": 0, "rejected": 0, "cost_rub": 0.0, "last_used_at": None,
+        })
+        u["questions"] += 1
+        u["answered" if qq["answered"] else "rejected"] += 1
+        u["cost_rub"] += qq["cost_rub"]
+        u["last_used_at"] = qq["created_at"]
+
+    def iso(dt):
+        return dt.isoformat() if dt else None
+
+    return {
+        "questions": len(questions),
+        "answered": answered,
+        "rejected": len(questions) - answered,
+        "cost_rub": round(total_cost, 4),
+        "filter_cost_rub": round(filter_cost, 4),
+        "answer_cost_rub": round(total_cost - filter_cost, 4),
+        "avg_cost_rub": round(total_cost / len(questions), 4) if questions else 0.0,
+        "tokens": sum(qq["tokens"] for qq in questions),
+        "by_user": sorted(
+            ({**u, "cost_rub": round(u["cost_rub"], 4), "last_used_at": iso(u["last_used_at"])} for u in by_user.values()),
+            key=lambda u: u["cost_rub"], reverse=True,
+        ),
+        "recent": [
+            {k: (iso(v) if k == "created_at" else round(v, 4) if k in ("cost_rub", "filter_cost_rub") else v)
+             for k, v in qq.items()}
+            for qq in reversed(questions[-recent_limit:])
+        ],
+    }

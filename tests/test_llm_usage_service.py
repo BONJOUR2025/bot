@@ -307,3 +307,45 @@ class TestEmployeeUsage:
         _log("1", "Анастасия", cached_tokens=0)
 
         assert svc.get_usage_by_employee()[0]["cached_tokens"] == 0
+
+
+class TestHelpUsage:
+    """«Помощь» в админке: вызовы фильтра и ответа склеиваются в вопросы."""
+
+    def test_filter_and_answer_pair_into_one_question(self, temp_db):
+        _log("admin:nick", "Nick", feature="admin_help_filter", cost_rub=0.01,
+             question="Как одобрить выплату?", answer="ДА")
+        _log("admin:nick", "Nick", feature="admin_help", cost_rub=0.2,
+             question="Как одобрить выплату?", answer="Где: Меню → Деньги → Выплаты")
+        _log("admin:nick", "Nick", feature="admin_help_filter", cost_rub=0.01,
+             question="Сколько выручки?", answer="НЕТ")
+
+        res = svc.get_help_usage()
+
+        assert res["questions"] == 2 and res["answered"] == 1 and res["rejected"] == 1
+        assert res["cost_rub"] == pytest.approx(0.22)
+        assert res["filter_cost_rub"] == pytest.approx(0.02)
+        assert res["answer_cost_rub"] == pytest.approx(0.2)
+        assert res["avg_cost_rub"] == pytest.approx(0.11)
+        newest, oldest = res["recent"]
+        assert newest["question"] == "Сколько выручки?" and not newest["answered"]
+        assert oldest["answered"] and oldest["cost_rub"] == pytest.approx(0.21)
+        assert res["by_user"][0]["questions"] == 2
+
+    def test_old_rows_without_filter_label_are_recognised(self, temp_db):
+        # До разделения меток фильтр тоже писался как admin_help.
+        _log("admin:nick", "Nick", feature="admin_help", cost_rub=0.01, answer="ДА")
+        _log("admin:nick", "Nick", feature="admin_help", cost_rub=0.2, answer="Ответ")
+        res = svc.get_help_usage()
+        assert res["questions"] == 1 and res["answered"] == 1
+
+    def test_follow_up_question_text_is_unwrapped(self, temp_db):
+        _log("admin:nick", "Nick", feature="admin_help_filter", answer="НЕТ",
+             question="Предыдущие вопросы:\n- раньше\n\nПоследний вопрос:\nа как отменить?")
+        assert svc.get_help_usage()["recent"][0]["question"] == "а как отменить?"
+
+    def test_help_rows_are_kept_out_of_the_employee_table(self, temp_db):
+        _log("1", "Анастасия")
+        _log("admin:nick", "Nick", feature="admin_help")
+        rows = svc.get_usage_by_employee(exclude_features=svc.HELP_FEATURES)
+        assert [r["employee_id"] for r in rows] == ["1"]
