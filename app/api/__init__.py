@@ -421,6 +421,11 @@ def create_app() -> FastAPI:
     app.include_router(create_point_router(), prefix="/api")
     app.include_router(create_point_admin_router(), prefix="/api", dependencies=protected)
 
+    # «Помощь» — инструкции по панели и ИИ-помощник; права у каждого свои.
+    from .help import create_help_router
+
+    app.include_router(create_help_router(), prefix="/api")
+
     # Цех — приложение старшего мастера, под правом «workshop».
     from .workshop import create_workshop_router
 

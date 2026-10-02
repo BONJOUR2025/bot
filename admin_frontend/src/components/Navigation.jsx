@@ -9,7 +9,7 @@ import {
   Hammer, TrendingUp, ListTodo, KeyRound, Send, LibraryBig, Truck,
   Clock, Replace, CalendarOff, MessageCircle, Users2, Sun, Moon, Monitor,
   Landmark, UserSearch, UserCog, SlidersHorizontal, Scan, Headphones, Search,
-  Smartphone, Factory, ScanBarcode, Wallet,
+  Smartphone, Factory, ScanBarcode, Wallet, LifeBuoy,
 } from 'lucide-react';
 
 import { useAuth } from '../providers/AuthProvider.jsx';
@@ -105,6 +105,8 @@ const navStructure = [
       { to: '/admin/passwords',      label: 'Пароли',      permission: 'passwords', icon: KeyRound },
       { to: '/admin/client-lk-password', label: 'Пароль клиента (ЛК)', permission: 'passwords', icon: Search },
       { to: '/admin/settings',       label: 'Настройки',   permission: 'settings',  icon: SettingsIcon },
+      // Без права: справка нужна всем, а что в ней видно — решает сервер.
+      { to: '/admin/help',           label: 'Помощь',      icon: LifeBuoy },
     ],
   },
 ];

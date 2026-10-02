@@ -90,6 +90,7 @@ const Scanner3D = lazy(() => import("./pages/Scanner3D"));
 const TagScanner = lazy(() => import("./pages/TagScanner"));
 const PointCabinet = lazy(() => import("./pages/PointCabinet"));
 const SalonAudio = lazy(() => import("./pages/SalonAudio"));
+const Help = lazy(() => import("./pages/Help"));
 
 function RouteFallback() {
   return (
@@ -187,6 +188,7 @@ export default function App() {
                 <Route path="smses" element={<Smses />} />
                 <Route path="recruitment" element={<Recruitment />} />
                 <Route path="knowledge-base" element={<KnowledgeBase />} />
+                <Route path="help" element={<Help />} />
               </Route>
 
               {/* Личный кабинет сотрудника */}
