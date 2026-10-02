@@ -1,6 +1,6 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { ArrowLeft, ArrowUpRight, RotateCcw, Search, Send, Sparkles } from 'lucide-react';
+import { ArrowLeft, ArrowUpRight, MapPin, RotateCcw, Search, Send, Sparkles } from 'lucide-react';
 import api from '../api';
 import PageHeader from '../components/ui/PageHeader.jsx';
 import { useViewport } from '../providers/ViewportProvider.jsx';
@@ -50,9 +50,27 @@ function parseBlocks(md) {
     list = null;
     if (!line.trim()) continue;
     if (line.startsWith('## ')) blocks.push({ type: 'h', text: line.slice(3) });
+    else if (line.startsWith('**Где:**')) blocks.push({ type: 'where', text: line.slice(8).trim() });
     else blocks.push({ type: 'p', text: line });
   }
   return blocks;
+}
+
+/** «Где: Меню → Деньги → Выплаты → вкладка «Заявки»» — самое важное в
+ *  инструкции, поэтому плашкой, а не строкой текста. */
+function Where({ text, compact = false }) {
+  return (
+    <div
+      className={`flex items-start gap-2 rounded-lg border text-[color:var(--color-text)] ${compact ? 'px-2.5 py-1.5 text-sm' : 'px-3 py-2 text-sm'}`}
+      style={{
+        background: 'color-mix(in srgb, var(--color-primary) 9%, transparent)',
+        borderColor: 'color-mix(in srgb, var(--color-primary) 35%, transparent)',
+      }}
+    >
+      <MapPin size={15} className="mt-0.5 shrink-0 text-[color:var(--color-primary)]" aria-hidden="true" />
+      <span><span className="font-semibold">Где: </span>{text.replace(/^Где:\s*/, '')}</span>
+    </div>
+  );
 }
 
 function Markdown({ text }) {
@@ -64,6 +82,7 @@ function Markdown({ text }) {
           return <h3 key={i} className="pt-3 text-base font-semibold text-[color:var(--color-text)]">{b.text}</h3>;
         }
         if (b.type === 'p') return <p key={i}>{inline(b.text)}</p>;
+        if (b.type === 'where') return <Where key={i} text={b.text} />;
         const ListTag = b.type === 'ol' ? 'ol' : 'ul';
         return (
           <ListTag key={i} className={`space-y-1.5 pl-5 ${b.type === 'ol' ? 'list-decimal' : 'list-disc'}`}>
@@ -163,7 +182,18 @@ function Assistant({ articles, onOpenArticle }) {
                   m.error ? 'border-[color:var(--color-danger)] text-[color:var(--color-danger)]'
                     : m.offtopic ? 'border-[color:var(--color-border)] text-[color:var(--color-text-muted)] italic'
                       : 'border-[color:var(--color-border)] text-[color:var(--color-text)]'}`}>
-                  <div className="whitespace-pre-wrap leading-relaxed">{m.content}</div>
+                  {(() => {
+                    const [first, ...rest] = m.content.split('\n');
+                    if (m.error || m.offtopic || !/^Где:/.test(first.trim())) {
+                      return <div className="whitespace-pre-wrap leading-relaxed">{m.content}</div>;
+                    }
+                    return (
+                      <>
+                        <Where text={first.trim()} compact />
+                        <div className="mt-2 whitespace-pre-wrap leading-relaxed">{rest.join('\n').trim()}</div>
+                      </>
+                    );
+                  })()}
                   {m.refs?.some((id) => byId[id]) && (
                     <div className="mt-2.5 flex flex-wrap gap-1.5 border-t border-[color:var(--color-border)] pt-2">
                       {m.refs.filter((id) => byId[id]).map((id) => (
@@ -285,6 +315,16 @@ export default function Help() {
           </Link>
         )}
       </div>
+      {current.menu && (
+        <div className="mb-5 space-y-1.5">
+          <Where text={`Меню → ${current.menu}`} />
+          {current.tabs && (
+            <p className="px-1 text-sm text-[color:var(--color-text-muted)]">
+              <span className="font-medium text-[color:var(--color-text)]">Вкладки: </span>{current.tabs}
+            </p>
+          )}
+        </div>
+      )}
       <Markdown text={current.body} />
     </article>
   );

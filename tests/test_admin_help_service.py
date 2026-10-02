@@ -105,3 +105,21 @@ def test_followup_uses_only_previous_user_questions(fake_llm):
     assert "Как перенести продажу?" in probe and "Секретный ответ" not in probe
     # В основной вызов история идёт, начиная с реплики пользователя.
     assert calls[1]["messages"][0]["role"] == "user"
+
+
+def test_every_article_says_where_it_lives_in_the_menu():
+    """Путь «группа → пункт» должен совпадать с меню панели: иначе справка
+    отправит человека искать пункт, которого нет."""
+    import re
+    from pathlib import Path
+
+    nav = Path("admin_frontend/src/components/Navigation.jsx").read_text(encoding="utf-8")
+    groups = {}
+    for block in re.finditer(r"name: '([^']+)',\s*items: \[(.*?)\]", nav, flags=re.S):
+        groups[block.group(1)] = set(re.findall(r"label: '([^']+)'", block.group(2)))
+    for a in svc.load_articles():
+        if a.id == "basics":
+            continue
+        assert a.menu, a.id
+        group, item = [x.strip() for x in a.menu.split("→")]
+        assert item in groups.get(group, set()), (a.id, a.menu)
