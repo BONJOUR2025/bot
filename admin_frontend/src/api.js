@@ -14,6 +14,11 @@ api.interceptors.request.use((config) => {
     config.headers = config.headers || {};
     config.headers.Authorization = `Bearer ${token}`;
   }
+  // Какую страницу человек сейчас смотрит — для журнала активности
+  // (app/utils/activity.py): по адресам API это не понять, страницы попутно
+  // дёргают чужие справочники.
+  config.headers = config.headers || {};
+  config.headers['X-Page'] = window.location.pathname;
   // Кабинет точки на ПК салона входит не по логину, а по ключу компьютера.
   if (isPointRequest(config.url)) {
     let pointToken = null;

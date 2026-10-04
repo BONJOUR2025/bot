@@ -14,6 +14,7 @@ import asyncio
 from fastapi import APIRouter, Depends, HTTPException, Query
 
 from app.services.access_control_service import ResolvedUser
+from app.utils.activity import note
 
 from .dependencies import get_current_user
 
@@ -225,7 +226,10 @@ def create_master_self_router() -> APIRouter:
         except scan.BarcodeError as exc:
             raise _scan_error(exc)
         if result is None:
+            note(f"отсканировал бирку {scan.normalize_barcode(barcode)} — не найдена в Агбисе")
             raise HTTPException(status_code=404, detail="Бирка не найдена в Агбисе. Проверьте номер под штрихкодом.")
+        svc = result.get("service") or {}
+        note(f"отсканировал бирку: заказ {svc.get('doc_num')}, {svc.get('name')}")
         return result
 
     @router.post("/scan/preview")
@@ -285,6 +289,16 @@ def create_master_self_router() -> APIRouter:
             "Скан: %s (Агбис %s) %s, бирка %s, заказ %s — %s",
             master.name, master.agbis_user_id, action, scan.normalize_barcode(barcode),
             result["service"].get("doc_num"), outcome,
+        )
+        if result["dry_run"]:
+            human = "пробный режим, в Агбис не записан"
+        elif result.get("written"):
+            human = "записан в Агбис"
+        else:
+            human = "не записан: " + "; ".join(result["blockers"])
+        note(
+            f"скан: {'вход' if action == 'in' else 'выход'}, заказ {result['service'].get('doc_num')}, "
+            f"{result['service'].get('name')} — {human}"
         )
         return result
 

@@ -85,38 +85,38 @@ def _safe_label(label: Any) -> str:
     return _SAFE_ID_PATTERN.sub("_", str(label)).strip("_")
 
 
+def _existing_user_log(safe_id: str) -> str | None:
+    """Имя (без .log) уже существующего файла этого человека, если есть.
+
+    Бот, VK-бот и API — разные процессы, и каждый подписывает человека
+    по-своему («@Ar_Oganov Armen» в Telegram, «Армен» в админке). Раньше
+    подпись входила в имя файла, и на одного человека копилось по 2–4
+    файла. Теперь файл ищется по id, а подпись берётся только для нового."""
+    candidates = [
+        p for p in USERS_LOG_DIR.glob(f"{safe_id}*.log")
+        if p.stem == safe_id or p.stem.startswith(safe_id + "_")
+    ]
+    if not candidates:
+        return None
+    return max(candidates, key=lambda p: p.stat().st_mtime).stem
+
+
 def _get_user_logger(user_id: Any, label: str | None = None) -> logging.Logger:
     safe_id = _safe_id(user_id)
-    filename = safe_id
-    safe_label = _safe_label(label) if label and str(label) != str(user_id) else ""
-    if safe_label:
-        filename = f"{safe_id}_{safe_label}"
-
     logger = _user_loggers.get(safe_id)
-    prev_filename = _user_log_filenames.get(safe_id)
-
-    if logger is not None and (prev_filename == filename or prev_filename != safe_id):
-        # Either the name is unchanged, or we already have a labeled
-        # filename — never downgrade back to a bare id on a later call
-        # that happens to arrive without a label.
+    if logger is not None:
         return logger
 
-    if logger is None:
-        logger = logging.getLogger(f"users.{safe_id}")
-        logger.setLevel(logging.INFO)
-    else:
-        # A fuller label showed up after the file was created with a
-        # shorter name (e.g. first log call happened before the
-        # username was known) — move the log onto the new filename
-        # instead of leaving it stuck with the old one forever.
-        for old_handler in list(logger.handlers):
-            logger.removeHandler(old_handler)
-            old_handler.close()
-        old_path = USERS_LOG_DIR / f"{prev_filename}.log"
-        new_path = USERS_LOG_DIR / f"{filename}.log"
-        if old_path.exists() and not new_path.exists():
-            old_path.rename(new_path)
+    filename = _existing_user_log(safe_id)
+    if filename is None:
+        safe_label = _safe_label(label) if label and str(label) != str(user_id) else ""
+        filename = f"{safe_id}_{safe_label}" if safe_label else safe_id
 
+    logger = logging.getLogger(f"users.{safe_id}")
+    logger.setLevel(logging.INFO)
+    for old_handler in list(logger.handlers):
+        logger.removeHandler(old_handler)
+        old_handler.close()
     logger.addHandler(_rotating_handler(USERS_LOG_DIR / f"{filename}.log"))
     _user_loggers[safe_id] = logger
     _user_log_filenames[safe_id] = filename

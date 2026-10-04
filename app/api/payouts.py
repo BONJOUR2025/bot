@@ -9,6 +9,7 @@ from app.core.enums import PAYOUT_STATUSES
 from app.schemas.payout import Payout, PayoutCreate, PayoutUpdate
 from app.services.payout_service import PayoutService
 from app.services.access_control_service import AccessControlService, ResolvedUser
+from app.utils.activity import note
 
 from .dependencies import get_current_user, require_permission
 
@@ -150,7 +151,10 @@ def create_payout_router(
         # что бы ни прислал клиент. Кто ведёт выплаты, решает сам.
         if not access_service.user_has_permission(current, PAYOUTS_PERMISSION):
             data.sync_to_bot = True
-        return await service.create_payout(data)
+        created = await service.create_payout(data)
+        note(f"создал заявку на выплату: {data.name}, {data.payout_type}, "
+             f"{data.amount:,.0f} ₽".replace(",", " ") + f", {data.method}")
+        return created
 
     @router.put("/{payout_id}", response_model=Payout)
     async def update_payout(
@@ -209,6 +213,7 @@ def create_payout_router(
         _ensure_access(payout_id, current)
         updated = await service.update_status(payout_id, PAYOUT_STATUSES[1])
         if updated:
+            note(f"одобрил выплату: {updated.name}, {updated.amount:,.0f} ₽".replace(",", " "))
             if not access_service.is_employee_visible(current, updated.user_id):
                 raise HTTPException(status_code=403, detail="forbidden")
             return updated
@@ -237,6 +242,7 @@ def create_payout_router(
         _ensure_access(payout_id, current)
         updated = await service.update_status(payout_id, PAYOUT_STATUSES[2])
         if updated:
+            note(f"отклонил выплату: {updated.name}, {updated.amount:,.0f} ₽".replace(",", " "))
             if not access_service.is_employee_visible(current, updated.user_id):
                 raise HTTPException(status_code=403, detail="forbidden")
             return updated
@@ -249,6 +255,7 @@ def create_payout_router(
         _ensure_access(payout_id, current)
         updated = await service.update_status(payout_id, PAYOUT_STATUSES[3])
         if updated:
+            note(f"отметил выплаченной: {updated.name}, {updated.amount:,.0f} ₽".replace(",", " "))
             if not access_service.is_employee_visible(current, updated.user_id):
                 raise HTTPException(status_code=403, detail="forbidden")
             return updated

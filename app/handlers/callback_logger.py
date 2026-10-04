@@ -47,6 +47,13 @@ def _describe_message(message) -> str:
 
 async def log_user_activity(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Log every incoming message from a user to their personal log file."""
+    # Режим «Секретарь»: бот подключён к личному Telegram владельца и видит
+    # его переписки. Это не действия в боте — и не наше дело писать чужие
+    # личные сообщения в журнал активности (там копились файлы посторонних).
+    if any(getattr(update, attr, None) for attr in (
+        "business_message", "edited_business_message", "deleted_business_messages",
+    )):
+        return
     message = update.effective_message
     user = update.effective_user
     if not user or not message:

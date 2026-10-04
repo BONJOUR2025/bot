@@ -1,3 +1,4 @@
+import logging
 from pathlib import Path
 
 from fastapi import Cookie, Depends, FastAPI, Request, status
@@ -79,16 +80,26 @@ def create_app() -> FastAPI:
 
     @app.middleware("http")
     async def log_api_activity(request: Request, call_next):
+        # Журнал активности — действия людей, а не HTTP-запросы: см.
+        # app/utils/activity.py. Анонимные запросы (вход, устройства,
+        # вебхуки) сюда не пишутся — входы есть в connections.log.
+        from app.utils import activity
+
+        notes = activity.start_request()
         response = await call_next(request)
         path = request.url.path
-        if path.startswith("/api") or path.startswith("/session"):
-            user = getattr(request.state, "user", None)
-            action = f"{request.method} {path} -> {response.status_code}"
-            if user:
-                label = user.login or user.display_name or user.id
-                log_user_action(user.id, label, action)
-            else:
-                log_user_action("anonymous", None, action)
+        user = getattr(request.state, "user", None)
+        if user and path.startswith("/api"):
+            try:
+                lines = activity.entries(
+                    str(user.id), request.method, path, response.status_code,
+                    request.headers.get("x-page"), notes,
+                )
+                label = user.display_name or user.login or user.id
+                for line in lines:
+                    log_user_action(user.id, label, line)
+            except Exception:
+                logging.getLogger(__name__).warning("Журнал активности не записан", exc_info=True)
         return response
 
     @app.get("/status", response_class=HTMLResponse)

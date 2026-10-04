@@ -16,6 +16,7 @@ from fastapi import APIRouter, Body, Depends, HTTPException, Query, Response
 from pydantic import BaseModel
 
 from app.services.access_control_service import ResolvedUser
+from app.utils.activity import note
 
 from .dependencies import get_current_user, require_permission
 
@@ -84,6 +85,7 @@ def create_workshop_router() -> APIRouter:
             employee_id, data.date, note=data.note.strip() or "отметил старший мастер", author=str(author),
         )
         invalidate()
+        note(f"отметил ученику {emp.name} день обучения {data.date:%d.%m.%Y} без турникета")
         return rec
 
     # ── поиск заказа и карточка ───────────────────────────────────────
@@ -102,6 +104,7 @@ def create_workshop_router() -> APIRouter:
         try:
             return await _run(orders.find, q)
         except orders.OrderNotFound as exc:
+            note(f"искал заказ «{q}» — не найден")
             raise HTTPException(404, str(exc))
 
     @router.get("/orders/{order_id}")
@@ -109,9 +112,11 @@ def create_workshop_router() -> APIRouter:
         from app.services import workshop_order_service as orders
 
         try:
-            return await _run(orders.card, order_id)
+            card = await _run(orders.card, order_id)
         except orders.OrderNotFound as exc:
             raise HTTPException(404, str(exc))
+        note(f"открыл заказ {card.get('doc_num') or order_id}")
+        return card
 
     @router.get("/photos/{photo_id}/full")
     async def order_photo(photo_id: int, md5: str = Query(...)):
@@ -192,6 +197,13 @@ def create_workshop_router() -> APIRouter:
             lead, master["name"], data.master_uid, data.action, scan.normalize_barcode(data.barcode), doc,
             written or "ничего", f", сбой: {result['failed']}" if result["failed"] else "",
         )
+        what_names = {"in": "вход", "out": "выход"}
+        note(
+            f"поставил {what_names.get(data.action, data.action)} за мастера {master['name']}: "
+            f"заказ {doc}, {result['service'].get('name')} — "
+            + (("записано: " + ", ".join(what_names.get(a, a) for a in written)) if written else "не записано")
+            + (f" (сбой: {result['failed'].get('reason')})" if result["failed"] else "")
+        )
         if written:
             invalidate_wip(data.master_uid)
             invalidate()
@@ -261,6 +273,7 @@ def create_workshop_router() -> APIRouter:
         invalidate()
         who = ", ".join(f"{p['name']} {p['percent']}%" for p in parts)
         scan_logger.info("Деление услуги %s (заказ %s) — %s: %s", service_id, svc["doc_num"], lead, who)
+        note(f"поделил услугу между мастерами: заказ {svc['doc_num']}, {svc['name']} — {who}")
         try:
             from app.services.notify import notify_group
 
@@ -283,6 +296,7 @@ def create_workshop_router() -> APIRouter:
         invalidate()
         lead = getattr(current, "display_name", None) or getattr(current, "login", None) or "старший мастер"
         scan_logger.info("Деление услуги %s снято — %s", service_id, lead)
+        note(f"снял деление услуги: заказ {(rec or {}).get('doc_num', '')}, {(rec or {}).get('service_name', service_id)}")
         try:
             from app.services.notify import notify_group
 
