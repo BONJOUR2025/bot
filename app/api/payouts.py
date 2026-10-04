@@ -149,11 +149,13 @@ def create_payout_router(
         # Сотрудник просит выплату сам (кабинет, приложение мастера) — заявка
         # всегда уходит в админский чат с кнопками «Разрешить / Отклонить»,
         # что бы ни прислал клиент. Кто ведёт выплаты, решает сам.
-        if not access_service.user_has_permission(current, PAYOUTS_PERMISSION):
+        self_request = not access_service.user_has_permission(current, PAYOUTS_PERMISSION)
+        if self_request:
             data.sync_to_bot = True
-        created = await service.create_payout(data)
+        created = await service.create_payout(data, self_request=self_request)
         note(f"создал заявку на выплату: {data.name}, {data.payout_type}, "
-             f"{data.amount:,.0f} ₽".replace(",", " ") + f", {data.method}")
+             f"{data.amount:,.0f} ₽".replace(",", " ") + f", {data.method}"
+             + (" — одобрена автоматически" if self_request and created.status == "Одобрено" else ""))
         return created
 
     @router.put("/{payout_id}", response_model=Payout)

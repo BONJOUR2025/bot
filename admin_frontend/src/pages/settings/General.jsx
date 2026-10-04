@@ -168,6 +168,13 @@ export default function SettingsGeneral() {
         <Field label="Лимит аванса в месяц (₽)" hint="Максимальная сумма авансов на одного сотрудника в календарный месяц">
           <input type="number" className="input w-full" {...register('max_advance_amount_per_month')} />
         </Field>
+        <Field
+          label="Автоодобрение авансов — до (₽ с последней зарплаты)"
+          hint="Аванс, который сотрудник просит сам, одобряется сразу, если вместе с уже выданными с последней зарплаты авансами не превышает эту сумму. Уведомление в бот приходит с пометкой «одобрено автоматически». Пусто — 85 000 ₽, 0 — выключено."
+        >
+          <input type="number" min="0" step="1000" className="input w-full" placeholder="85000"
+            {...register('payout_auto_approve_limit')} />
+        </Field>
       </Section>
 
       <Section title="PDF-отчёты">

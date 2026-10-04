@@ -164,7 +164,7 @@ class PayoutService:
             results[payout_id] = await self.find_cash_move_for_payout(payout_id)
         return results
 
-    async def create_payout(self, data: PayoutCreate) -> Payout:
+    async def create_payout(self, data: PayoutCreate, self_request: bool = False) -> Payout:
         self._repo.reload()
         payout_dict: Dict = {
             "user_id": data.user_id,
@@ -201,7 +201,17 @@ class PayoutService:
         )
         if self._telegram and data.sync_to_bot:
             try:
-                await self._telegram.send_payout_request_to_admin(created)
+                if self_request:
+                    # Сотрудник просит сам (кабинет, приложение мастера) —
+                    # аванс в пределах лимита одобряется сразу.
+                    from app.services.payout_auto_approval import handle_new_request
+
+                    if await handle_new_request(self._telegram, created):
+                        self._repo.reload()
+                        created = next((p for p in self._repo.load_all()
+                                        if str(p.get("id")) == str(created.get("id"))), created)
+                else:
+                    await self._telegram.send_payout_request_to_admin(created)
             except Exception as exc:
                 logger.warning(f"Не удалось отправить в бот: {exc}")
         return Payout(**created)

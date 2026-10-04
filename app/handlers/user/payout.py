@@ -234,12 +234,17 @@ async def confirm_card(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
         data.get("payout_type"),
     )
 
+    from app.services.payout_auto_approval import handle_new_request
+
     telegram_service = TelegramService(EmployeeRepository(), bot=context.application.bot)
+    auto = False
     try:
-        await telegram_service.send_payout_request_to_admin(record)
+        auto = await handle_new_request(telegram_service, record)
     except Exception as exc:
         log(f"❌ Failed to notify admin: {exc}")
 
-    await query.edit_message_text("✅ Запрос отправлен администратору.")
+    await query.edit_message_text(
+        "✅ Запрос одобрен автоматически." if auto else "✅ Запрос отправлен администратору."
+    )
     context.user_data.clear()
     return ConversationHandler.END

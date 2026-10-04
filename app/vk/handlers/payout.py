@@ -120,10 +120,16 @@ async def confirm(bot: Bot, message: Message, employee_id: str, payload: dict) -
         payload.get("payout_type"),
     )
 
+    from app.services.payout_auto_approval import handle_new_request
+
     telegram_service = TelegramService(EmployeeRepository())
+    auto = False
     try:
-        await telegram_service.send_payout_request_to_admin(record)
+        auto = await handle_new_request(telegram_service, record)
     except Exception as exc:
         log(f"❌ [vk/payout] Failed to notify admin: {exc}")
 
-    await message.answer("✅ Запрос отправлен администратору.", keyboard=main_menu(employee_id).get_json())
+    await message.answer(
+        "✅ Запрос одобрен автоматически." if auto else "✅ Запрос отправлен администратору.",
+        keyboard=main_menu(employee_id).get_json(),
+    )

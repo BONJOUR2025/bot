@@ -152,27 +152,59 @@ async def allow_payout(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         await query.edit_message_text("❌ Запрос уже обработан.")
         return
 
+    result = await approve_request(context.bot, request_to_approve)
+
+    current_text = query.message.text
+    updated_text = f"{current_text}\n\n✅ Одобрено"
+    if result["cashier_line"]:
+        updated_text += f"\n{result['cashier_line']}"
+    log(
+        f"[Telegram] editing message {query.message.message_id} in {query.message.chat.id}"
+    )
+    try:
+        await query.edit_message_text(text=updated_text)
+    except BadRequest as e:
+        log(
+            f"❌ Failed to edit message {query.message.message_id} in chat {query.message.chat.id} — {e}"
+        )
+        # Editing message is optional; continue without raising
+
+
+async def approve_request(bot, request_to_approve: dict, *, how: str = "") -> dict:
+    """Одобрить заявку в статусе «Ожидает»: статус, сообщение сотруднику,
+    запрос кассиру (для «На карту» и «Наличными» или при force_notify_cashier).
+
+    Общая часть кнопки «✅ Разрешить» и автоодобрения авансов
+    (app/services/payout_auto_approval.py) — чтобы автоматическое одобрение
+    делало ровно то же, что ручное. ``how`` — пометка для журнала аудита.
+
+    Возвращает {"updated": bool, "cashier_line": строка для админского
+    сообщения или ""}.
+    """
+    from types import SimpleNamespace
+
     user_id = request_to_approve["user_id"]
     log(
-        f"📋 [allow_payout] Найден запрос {request_to_approve['id']} для user_id {user_id}"
+        f"📋 [approve_request] Найден запрос {request_to_approve['id']} для user_id {user_id}"
     )
 
     try:
-        updated = update_request_status(payout_id, "approved")
+        updated = update_request_status(request_to_approve["id"], "approved")
     except Exception as e:
         log(f"❌ Ошибка обновления статуса выплаты: {e}")
         updated = False
 
     if updated:
-        log(f"✅ [allow_payout] Статус запроса {request_to_approve['id']} обновлён")
+        log(f"✅ [approve_request] Статус запроса {request_to_approve['id']} обновлён")
         audit_logger.info(
-            f"✏️ Выплата {request_to_approve['id']} обновлена — статус: Одобрено"
+            f"✏️ Выплата {request_to_approve['id']} обновлена — статус: Одобрено{how}"
         )
     else:
-        log(f"⚠️ [allow_payout] Не удалось обновить запрос {request_to_approve['id']}")
+        log(f"⚠️ [approve_request] Не удалось обновить запрос {request_to_approve['id']}")
         audit_logger.warning(
             f"Не удалось обновить запрос {request_to_approve['id']} пользователя {user_id}"
         )
+        return {"updated": False, "cashier_line": ""}
 
     payout_type = request_to_approve.get("payout_type") or "Не указано"
     method = request_to_approve.get("method") or ""
@@ -193,36 +225,25 @@ async def allow_payout(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         f"Сумма: {request_to_approve['amount']} ₽\n"
         f"Метод: {method or 'Не указан'}"
     )
-    await _notify_employee(context, request_to_approve, "Одобрено", user_message)
+    # _notify_employee берёт только context.bot.
+    await _notify_employee(SimpleNamespace(bot=bot), request_to_approve, "Одобрено", user_message)
 
-    current_text = query.message.text
-    updated_text = f"{current_text}\n\n✅ Одобрено"
+    cashier_line = ""
     if should_notify_cashier:
         if cashier_chat_name:
             display_name = cashier_chat_name
             if cashier_chat_key and cashier_chat_key != cashier_chat_name:
                 display_name = f"{cashier_chat_name} ({cashier_chat_key})"
-            updated_text += f"\n📬 Чат кассира: {display_name}"
+            cashier_line = f"📬 Чат кассира: {display_name}"
         elif cashier_chat_key:
-            updated_text += f"\n📬 Чат кассира: {cashier_chat_key}"
+            cashier_line = f"📬 Чат кассира: {cashier_chat_key}"
         elif not cashier_chat_id:
-            updated_text += "\n⚠️ Чат кассира не настроен"
-    log(
-        f"[Telegram] editing message {query.message.message_id} in {query.message.chat.id}"
-    )
-    try:
-        await query.edit_message_text(text=updated_text)
-    except BadRequest as e:
-        log(
-            f"❌ Failed to edit message {query.message.message_id} in chat {query.message.chat.id} — {e}"
-        )
-        # Editing message is optional; continue without raising
-
-    if should_notify_cashier:
+            cashier_line = "⚠️ Чат кассира не настроен"
         await send_cashier_notice(
-            context.bot, request_to_approve,
+            bot, request_to_approve,
             chat=(cashier_chat_id, cashier_chat_name, cashier_chat_key),
         )
+    return {"updated": True, "cashier_line": cashier_line}
 
 
 def _cashier_text(payout: dict, chat_name: str, chat_key: str | None) -> str:

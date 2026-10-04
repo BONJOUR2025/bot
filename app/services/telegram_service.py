@@ -441,18 +441,10 @@ class TelegramService:
         text = f"💬 Сообщение от сотрудника\n\n👤 {name}\n\n{message}"
         await self._send_to_all(chat_ids, text)
 
-    async def send_payout_request_to_admin(self, payout: Dict[str, Any]) -> None:
-        """Notify the admin chat about a payout request."""
-        if self.bot is None:
-            log("⚠️ Telegram bot not configured; cannot notify admin")
-            raise TelegramNotConfiguredError("Telegram bot not configured")
-
+    @staticmethod
+    def _payout_body(payout: Dict[str, Any]) -> str:
         card_info = payout.get("card_number") or "—"
         text = (
-            # «РЕШЕНИЕ», а не «НУЖЕН ОТВЕТ»: здесь от вас ждут не реплики, а
-            # нажатия кнопки, и на другой стороне человек ждёт денег. Самая
-            # срочная категория в системе.
-            "🔴 РЕШЕНИЕ · Новый запрос на выплату\n\n"
             f"👤 {payout['name']}\n"
             f"💳 {card_info}\n"
             f"🏦 {payout['bank']}\n"
@@ -462,6 +454,37 @@ class TelegramService:
         )
         if payout.get("note") and payout.get("show_note_in_bot"):
             text += f"\n\n📝 {payout['note']}"
+        return text
+
+    async def send_payout_auto_approved_to_admin(self, payout: Dict[str, Any], extra: str = "") -> None:
+        """Аванс одобрен автоматически (payout_auto_approval) — та же группа
+        «Запросы на выплаты», но без кнопок: решать нечего."""
+        if self.bot is None:
+            raise TelegramNotConfiguredError("Telegram bot not configured")
+        text = ("🟢 Одобрено автоматически, действий не требуется\n\n"
+                + self._payout_body(payout) + (f"\n\n{extra}" if extra else ""))
+        from app.services import notification_routing
+
+        chat_ids = notification_routing.recipients("payouts")
+        if not chat_ids:
+            log("⚠️ Уведомления «Запросы на выплаты» выключены или без получателей")
+            return
+        await self._send_to_all(chat_ids, text)
+
+    async def send_payout_request_to_admin(self, payout: Dict[str, Any], extra: str = "") -> None:
+        """Notify the admin chat about a payout request."""
+        if self.bot is None:
+            log("⚠️ Telegram bot not configured; cannot notify admin")
+            raise TelegramNotConfiguredError("Telegram bot not configured")
+
+        text = (
+            # «РЕШЕНИЕ», а не «НУЖЕН ОТВЕТ»: здесь от вас ждут не реплики, а
+            # нажатия кнопки, и на другой стороне человек ждёт денег. Самая
+            # срочная категория в системе.
+            "🔴 РЕШЕНИЕ · Новый запрос на выплату\n\n" + self._payout_body(payout)
+        )
+        if extra:
+            text += f"\n\n{extra}"
         markup = InlineKeyboardMarkup(
             [
                 [InlineKeyboardButton("✅ Разрешить", callback_data=f"allow_payout_{payout['id']}")],
