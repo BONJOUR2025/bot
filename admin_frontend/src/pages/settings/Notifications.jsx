@@ -5,31 +5,48 @@ import { useToast } from '../../providers/ToastProvider.jsx';
 
 /** Кому и какие уведомления основного бота уходят.
  *
- *  Каждая группа — свой выключатель и свои получатели (Telegram ID).
+ *  Каждая группа — свой выключатель и свои получатели (Telegram ID или
+ *  @username — см. notification_routing.resolve_username).
  *  Группа, которую ещё не настраивали, шлёт получателю по умолчанию — туда
  *  же, куда всё уходило до разделения (notification_chat_id). Сохранение
  *  действует сразу во всех процессах бота, перезапуск не нужен. */
 
 function PersonPicker({ people, taken, onAdd }) {
   const [value, setValue] = useState('');
+  const [error, setError] = useState('');
   const options = people.filter((p) => !taken.includes(p.id));
   const add = () => {
     const v = value.trim();
     if (!v) return;
     const fromList = options.find((p) => `${p.name} · ${p.hint}` === v || String(p.id) === v);
-    const id = fromList ? fromList.id : (/^\d{5,}$/.test(v) ? Number(v) : null);
-    if (!id) return;
+    // @username: кто уже писал боту, есть в списке с подсказкой «@…» —
+    // берём его ID; иначе отдаём как есть, сервер сверит при сохранении.
+    const uname = /^@[A-Za-z][A-Za-z0-9_]{3,31}$/.test(v) ? v.toLowerCase() : null;
+    const byUsername = uname && options.find((p) => (p.hint || '').toLowerCase() === uname);
+    const id = fromList ? fromList.id
+      : byUsername ? byUsername.id
+        : uname || (/^\d{5,}$/.test(v) ? Number(v) : null);
+    if (!id) {
+      setError('Выберите сотрудника из списка, впишите @username или числовой Telegram ID');
+      return;
+    }
+    if (taken.includes(id)) {
+      setError('Уже в списке');
+      return;
+    }
     onAdd(id);
     setValue('');
+    setError('');
   };
   return (
     <div className="nr-pick">
-      <input className="input" list="nr-people" value={value} placeholder="Сотрудник или Telegram ID"
-        onChange={(e) => setValue(e.target.value)}
+      <input className="input" list="nr-people" value={value} placeholder="Сотрудник, @username или Telegram ID"
+        onChange={(e) => { setValue(e.target.value); setError(''); }}
         onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); add(); } }} />
       <button type="button" className="btn btn--secondary btn--sm" onClick={add} disabled={!value.trim()}>
         <Plus size={14} /> Добавить
       </button>
+      {error && <span className="nr-warn">{error}</span>}
     </div>
   );
 }
@@ -141,9 +158,12 @@ export default function SettingsNotifications() {
                 <div className="nr-recipients">
                   {st.recipients.length === 0 && <span className="nr-warn">Нет получателей — уведомления этой группы теряются.</span>}
                   {st.recipients.map((id) => {
-                    const p = names[id] || { name: `ID ${id}`, hint: 'нет в списке сотрудников' };
+                    const p = names[id] || (typeof id === 'string'
+                      ? { name: id, hint: 'проверится при сохранении' }
+                      : { name: `ID ${id}`, hint: 'нет в списке сотрудников' });
                     return (
-                      <span key={id} className="nr-chip">
+                      <span key={id} className={`nr-chip ${p.pending ? 'nr-chip--pending' : ''}`}
+                        title={p.pending ? 'Уведомления начнут приходить, когда человек нажмёт «Старт» в боте' : undefined}>
                         <b>{p.name}</b><small>{p.hint}</small>
                         <button type="button" aria-label={`Убрать ${p.name}`}
                           onClick={() => change(g.key, { recipients: st.recipients.filter((x) => x !== id) })}><X size={13} /></button>

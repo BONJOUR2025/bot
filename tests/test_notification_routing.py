@@ -79,3 +79,60 @@ def test_disabled_group_sends_nothing(routing, monkeypatch):
     routing({"digest": {"enabled": False, "recipients": [11]}})
     monkeypatch.setattr(notify.httpx, "AsyncClient", lambda **kw: pytest.fail("не должно отправляться"))
     assert asyncio.run(notify.notify_group("digest", "сводка")) is False
+
+
+# ── получатель по @username ────────────────────────────────────────────
+class _BotUsers:
+    def __init__(self, users):
+        self.users = users
+
+    def list(self):
+        return self.users
+
+
+@pytest.fixture
+def bot_users(monkeypatch):
+    users = [{"telegram_id": "555", "username": "Ar_Oganov"}]
+    monkeypatch.setattr("app.data.bot_user_repository.get_bot_user_repository", lambda: _BotUsers(users))
+    return users
+
+
+def test_username_normalized():
+    assert nr.normalize_username("@Ar_Oganov") == "@ar_oganov"
+    assert nr.normalize_username("Ar_Oganov") == "@ar_oganov"
+    assert nr.normalize_username("@ab") is None          # короче 5 символов не бывает
+    assert nr.normalize_username("@1abc_def") is None    # не может начинаться с цифры
+    assert nr.normalize_username("12345") is None
+
+
+def test_username_resolved_case_insensitively(bot_users):
+    assert nr.resolve_username("@ar_OGANOV") == 555
+    assert nr.resolve_username("@nobody_here") is None
+
+
+def test_pending_username_skipped_until_user_starts_bot(routing, bot_users):
+    routing({"payouts": {"enabled": True, "recipients": [7, "@new_admin", "@Ar_Oganov"]}})
+    assert nr.recipients("payouts") == [7, 555]
+    # Человек нажал «Старт» — бот записал его, и уведомления пошли.
+    bot_users.append({"telegram_id": "777", "username": "new_admin"})
+    assert nr.recipients("payouts") == [7, 777, 555]  # порядок — как в настройках
+
+
+def test_api_saves_id_for_known_username_and_keeps_pending(routing, bot_users, tmp_path):
+    from app.api.notification_routing import GroupIn, RoutingIn, create_notification_routing_router
+
+    router = create_notification_routing_router()
+    put = next(r.endpoint for r in router.routes if "PUT" in r.methods)
+    asyncio.run(put(RoutingIn(groups={"payouts": GroupIn(recipients=[7, "@AR_OGANOV", "@new_admin", "555"])})))
+    saved = json.loads((tmp_path / "routing.json").read_text(encoding="utf-8"))
+    assert saved["groups"]["payouts"]["recipients"] == [7, 555, "@new_admin"]
+
+
+def test_api_rejects_garbage_username(routing, bot_users):
+    from fastapi import HTTPException
+
+    from app.api.notification_routing import GroupIn, RoutingIn, create_notification_routing_router
+
+    put = next(r.endpoint for r in create_notification_routing_router().routes if "PUT" in r.methods)
+    with pytest.raises(HTTPException):
+        asyncio.run(put(RoutingIn(groups={"payouts": GroupIn(recipients=["@ab"])})))

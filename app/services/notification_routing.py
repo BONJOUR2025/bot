@@ -3,7 +3,7 @@
 Раньше всё служебное летело одному человеку — в notification_chat_id
 (уведомления системы и подбора) или в ADMIN_CHAT_ID (заявки из бота). Теперь
 уведомления разбиты на группы, у каждой — свой выключатель и свой список
-получателей (Telegram ID): запросы на выплаты одному, сообщения кандидатов
+получателей (Telegram ID или @username): запросы на выплаты одному, сообщения кандидатов
 другому и т. д.
 
 Группа, которую ещё не настраивали, шлёт туда же, куда и раньше
@@ -20,6 +20,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 from typing import Any
 
 log = logging.getLogger(__name__)
@@ -101,8 +102,11 @@ def group_settings(group: str) -> dict[str, Any]:
     if not isinstance(cfg, dict):
         default = default_recipient()
         return {"enabled": True, "recipients": [default] if default else [], "configured": False}
-    recipients = []
+    recipients: list[int | str] = []
     for r in cfg.get("recipients") or []:
+        if isinstance(r, str) and normalize_username(r):
+            recipients.append(normalize_username(r))
+            continue
         try:
             recipients.append(int(r))
         except (TypeError, ValueError):
@@ -110,13 +114,48 @@ def group_settings(group: str) -> dict[str, Any]:
     return {"enabled": bool(cfg.get("enabled", True)), "recipients": recipients, "configured": True}
 
 
+# ── получатель по @username ────────────────────────────────────────────
+# Telegram не даёт боту узнать ID человека по username и не даёт написать
+# тому, кто бота не запускал. Поэтому @username сверяется со списком тех, кто
+# писал боту (bot_users.json): нашёлся — в настройки ложится ID; нет —
+# хранится «@username» и превращается в ID на каждой отправке, как только
+# человек нажмёт «Старт».
+USERNAME_RE = re.compile(r"^@?([A-Za-z][A-Za-z0-9_]{3,31})$")
+
+
+def normalize_username(value: Any) -> str | None:
+    m = USERNAME_RE.match(str(value or "").strip())
+    return f"@{m.group(1).lower()}" if m else None
+
+
+def resolve_username(value: Any) -> int | None:
+    name = normalize_username(value)
+    if not name:
+        return None
+    try:
+        from app.data.bot_user_repository import get_bot_user_repository
+
+        for u in get_bot_user_repository().list():
+            if (u.get("username") or "").lower() == name[1:]:
+                tid = str(u.get("telegram_id") or "")
+                return int(tid) if tid.lstrip("-").isdigit() else None
+    except Exception:
+        log.warning("notification_routing: список пользователей бота не прочитан", exc_info=True)
+    return None
+
+
 def recipients(group: str) -> list[int]:
-    """Кому отправлять уведомление группы; [] — группа выключена или пуста."""
+    """Кому отправлять уведомление группы; [] — группа выключена или пуста.
+    @username, который ещё не писал боту, пропускается."""
     s = group_settings(group)
     if not s["enabled"]:
         return []
     seen: list[int] = []
     for r in s["recipients"]:
+        if isinstance(r, str):
+            r = resolve_username(r)
+            if r is None:
+                continue
         if r not in seen:
             seen.append(r)
     return seen

@@ -8215,10 +8215,12 @@ button:hover > .vac-desc { color: var(--color-text); }
 .nr-chip { display: inline-flex; align-items: center; gap: 6px; padding: 4px 6px 4px 10px; border-radius: 999px; background: color-mix(in srgb, var(--color-primary) 10%, transparent); font-size: .85rem; }
 .nr-chip b { font-weight: 600; color: var(--color-text); }
 .nr-chip small { color: var(--color-muted-foreground, var(--color-text-muted)); font-size: .75rem; }
+/* @username, который ещё не писал боту: уведомления пока не доходят. */
+.nr-chip--pending { background: color-mix(in srgb, var(--color-warning, #d97706) 14%, transparent); }
 .nr-chip button { display: inline-flex; border: 0; background: transparent; padding: 2px; border-radius: 50%; cursor: pointer; color: var(--color-muted-foreground, var(--color-text-muted)); }
 .nr-chip button:hover { background: var(--color-control-bg); color: var(--color-text); }
 .nr-default { font-size: .75rem; color: var(--color-muted-foreground, var(--color-text-muted)); border: 1px dashed var(--color-border); border-radius: 999px; padding: 2px 8px; }
-.nr-pick { display: inline-flex; gap: 6px; align-items: center; }
+.nr-pick { display: inline-flex; flex-wrap: wrap; gap: 6px; align-items: center; }
 .nr-pick .input { width: 16rem; padding-block: 6px; font-size: .85rem; }
 .nr-off { margin: 0; padding-left: 52px; display: flex; align-items: center; gap: 6px; font-size: .85rem; color: var(--color-muted-foreground, var(--color-text-muted)); }
 .nr-warn { font-size: .82rem; color: var(--color-danger); }

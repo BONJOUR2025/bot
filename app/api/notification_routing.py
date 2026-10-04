@@ -16,7 +16,8 @@ from .dependencies import require_permission
 
 class GroupIn(BaseModel):
     enabled: bool = True
-    recipients: list[int] = []
+    # Telegram ID или «@username» (см. notification_routing.resolve_username).
+    recipients: list[int | str] = []
 
 
 class RoutingIn(BaseModel):
@@ -61,7 +62,13 @@ def create_notification_routing_router() -> APIRouter:
 
         people = _people()
 
-        def person(pid: int) -> dict[str, Any]:
+        def person(pid: int | str) -> dict[str, Any]:
+            if isinstance(pid, str):
+                tid = nr.resolve_username(pid)
+                if tid is not None:
+                    return {"id": pid, "name": (people.get(tid) or {}).get("name") or pid, "hint": pid}
+                return {"id": pid, "name": pid, "hint": "ещё не писал боту — получит после «Старт»",
+                        "pending": True}
             p = people.get(pid) or {"name": f"ID {pid}", "hint": "нет в списке сотрудников"}
             return {"id": pid, **p}
 
@@ -87,11 +94,19 @@ def create_notification_routing_router() -> APIRouter:
         doc = nr.load()
         groups = doc.setdefault("groups", {})
         for key, g in data.groups.items():
-            bad = [r for r in g.recipients if r <= 0]
-            if bad:
-                raise HTTPException(400, f"Некорректный Telegram ID: {bad[0]}")
-            uniq: list[int] = []
+            uniq: list[int | str] = []
             for r in g.recipients:
+                if isinstance(r, str) and not r.strip().lstrip("-").isdigit():
+                    name = nr.normalize_username(r)
+                    if not name:
+                        raise HTTPException(400, f"Некорректный @username: {r}")
+                    # Уже писал боту — храним ID: он не меняется, а username
+                    # человек может сменить в любой момент.
+                    r = nr.resolve_username(name) or name
+                else:
+                    r = int(r)
+                    if r <= 0:
+                        raise HTTPException(400, f"Некорректный Telegram ID: {r}")
                 if r not in uniq:
                     uniq.append(r)
             groups[key] = {"enabled": g.enabled, "recipients": uniq}
