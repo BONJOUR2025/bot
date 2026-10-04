@@ -21,7 +21,7 @@ from app.services.access_control_service import (
     ResolvedUser,
     get_access_control_service,
 )
-from app.utils.logger import log_connection
+from app.utils.logger import log_connection, log_user_action
 
 from .dependencies import get_current_user, require_permission
 
@@ -83,6 +83,8 @@ def create_auth_router(service: AccessControlService | None = None) -> APIRouter
             log_connection(f"Admin: failed login attempt for login={payload.login!r}")
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="invalid_credentials")
         log_connection(f"Admin: {resolved.login or resolved.id} logged in")
+        log_user_action(resolved.id, resolved.display_name or resolved.login or resolved.id,
+                        "вошёл по логину и паролю")
         token = service.issue_token(resolved.id)
         response.set_cookie(
             "access_token",

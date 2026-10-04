@@ -190,6 +190,13 @@ SECTIONS: tuple[tuple[str, str], ...] = (
 
 VERBS = {"POST": "действие", "PUT": "изменение", "PATCH": "изменение", "DELETE": "удаление"}
 OPEN_DEDUP_S = 600
+# Первый запрос после такой паузы — новый заход в панель. Пишется всегда,
+# даже без X-Page: иначе человек, который только смотрел страницы во
+# вкладке со старой версией панели (без заголовка), выглядел бы так, будто
+# не заходил вовсе.
+SESSION_GAP_S = 1800
+
+_last_seen: dict[str, float] = {}
 
 _dedup_lock = threading.Lock()
 _last_open: dict[str, tuple[str, float]] = {}
@@ -243,6 +250,17 @@ def entries(user_key: str, method: str, path: str, status: int, page: str | None
             notes: list[str] | None, *, now: float | None = None) -> list[str]:
     """Все строки журнала, которые даёт один запрос, по порядку."""
     out: list[str] = []
+    now = time.time() if now is None else now
+    with _dedup_lock:
+        prev = _last_seen.get(user_key)
+        _last_seen[user_key] = now
+    if prev is None or now - prev > SESSION_GAP_S:
+        if page and page.startswith("/employee"):
+            out.append("зашёл в личный кабинет")
+        elif page:
+            out.append("зашёл в панель")
+        else:
+            out.append("зашёл в панель (какие разделы открывал — не видно: устаревшая вкладка, нужно обновить страницу)")
     opened = page_open(user_key, page, now=now)
     if opened:
         out.append(opened)

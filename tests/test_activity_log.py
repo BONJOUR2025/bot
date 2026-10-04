@@ -7,6 +7,7 @@ from app.utils import activity
 @pytest.fixture(autouse=True)
 def fresh_dedup(monkeypatch):
     monkeypatch.setattr(activity, "_last_open", {})
+    monkeypatch.setattr(activity, "_last_seen", {})
 
 
 def test_page_open_logged_once_while_staying_on_page():
@@ -35,8 +36,9 @@ def test_page_names():
 
 
 def test_reads_and_noise_are_not_logged():
-    assert activity.entries("u", "GET", "/api/masters/me/earnings", 200, None, []) == []
-    assert activity.entries("u", "GET", "/api/auth/me", 200, "/admin", [])[1:] == []
+    activity.entries("u", "GET", "/api/auth/me", 200, None, [], now=0)  # начало сеанса
+    assert activity.entries("u", "GET", "/api/masters/me/earnings", 200, None, [], now=5) == []
+    assert activity.entries("u", "GET", "/api/auth/me", 200, None, [], now=6) == []
     assert activity.describe_change("POST", "/api/mdm/device", 200) is None
     assert activity.describe_change("POST", "/api/manager-salary/calc", 200) is None
 
@@ -50,7 +52,19 @@ def test_change_without_note_keeps_section_and_path():
 def test_handler_note_replaces_generic_line():
     lines = activity.entries("u", "POST", "/api/masters/me/scan/confirm", 200, "/employee/scan",
                              ["скан: выход, заказ 123 — записан в Агбис"], now=0)
-    assert lines == ["открыл «Скан» (кабинет мастера)", "скан: выход, заказ 123 — записан в Агбис"]
+    assert lines == ["зашёл в личный кабинет", "открыл «Скан» (кабинет мастера)",
+                     "скан: выход, заказ 123 — записан в Агбис"]
+
+
+def test_visit_is_logged_even_from_stale_tab_without_page_header():
+    """Человек, который только смотрел панель во вкладке со старой версией
+    (без X-Page), не должен выглядеть так, будто не заходил."""
+    first = activity.entries("alena", "GET", "/api/employees/", 200, None, [], now=0)
+    assert len(first) == 1 and first[0].startswith("зашёл в панель")
+    assert activity.entries("alena", "GET", "/api/birthdays/", 200, None, [], now=60) == []
+    # Вернулась через час — новый заход.
+    again = activity.entries("alena", "GET", "/api/birthdays/", 200, "/admin/birthdays", [], now=4000)
+    assert again == ["зашёл в панель", "открыл «Дни рождения»"]
 
 
 def test_note_collects_into_current_request():

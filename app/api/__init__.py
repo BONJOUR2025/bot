@@ -182,6 +182,8 @@ def create_app() -> FastAPI:
                 status_code=status.HTTP_401_UNAUTHORIZED,
             )
         log_connection(f"Admin: {resolved.login or resolved.id} logged in")
+        log_user_action(resolved.id, resolved.display_name or resolved.login or resolved.id,
+                        "вошёл по логину и паролю")
         token = access_service.issue_token(resolved.id)
         response = JSONResponse({"status": "ok", "token": token})
         response.set_cookie(

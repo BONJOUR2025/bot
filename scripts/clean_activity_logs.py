@@ -2,6 +2,8 @@
 
     python -m scripts.clean_activity_logs <каталог бота>            # что будет сделано
     python -m scripts.clean_activity_logs <каталог бота> --apply    # сделать
+    python -m scripts.clean_activity_logs <каталог бота> --sessions-from <архив.zip> [--apply]
+        # дописать визиты из архива в уже почищенные файлы
 
 Что делает:
 1. Кладёт всю папку logs/users как есть в logs/archive/users_<дата>.zip —
@@ -104,8 +106,40 @@ def read_entries(path: Path) -> list[str]:
     return entries
 
 
+def sessions(entries: list[str]) -> list[str]:
+    """Визиты из сырых строк истории: подряд идущие запросы (пауза меньше
+    SESSION_GAP_S) — один заход «с … до …». Без этого человек, который
+    только смотрел панель, после чистки выглядел бы так, будто не заходил."""
+    raw = []
+    for e in entries:
+        m = RAW_API.match(e)
+        ts = TS.match(e)
+        if m and ts and not activity.is_noise(m["path"]) or (m and ts and m["path"].startswith("/api/auth/me")):
+            raw.append((datetime.strptime(ts.group(1), "%Y-%m-%d %H:%M:%S"), m["head"]))
+    raw.sort(key=lambda x: x[0])
+    out, start, last, head, count = [], None, None, None, 0
+
+    def flush():
+        if start is not None:
+            a, b = f"{start:%H:%M}", f"{last:%H:%M}"
+            span = a if a == b else f"{a}–{b}"
+            stamp = start.strftime("%Y-%m-%d %H:%M:%S") + ",000"
+            out.append(f"{stamp}{head[23:]} был в панели {span} ({count} запр.; что именно смотрел, "
+                       f"до 04.10.2026 не записывалось)")
+
+    for t, h in raw:
+        if start is None or (t - last).total_seconds() > activity.SESSION_GAP_S:
+            flush()
+            start, count, head = t, 0, h
+        last = t
+        count += 1
+    flush()
+    return out
+
+
 def convert(entries: list[str], key: str) -> list[str]:
     activity._last_open.clear()
+    activity._last_seen.clear()
     out = []
     for e in sorted(entries, key=lambda x: x[:23]):
         m = RAW_API.match(e)
@@ -117,8 +151,10 @@ def convert(entries: list[str], key: str) -> list[str]:
         method, path, status = m["method"], m["path"], int(m["status"])
         page = guess_page(path) if method == "GET" and status < 400 else None
         for text in activity.entries(key, method, path, status, page, [], now=now):
+            if text.startswith("зашёл в"):
+                continue  # заходы в истории даёт sessions(), с началом и концом
             out.append(f"{m['head']} {text}")
-    return out
+    return sorted(out + sessions(entries), key=lambda x: x[:23])
 
 
 # Подробности сканов в истории: middleware писал только «POST …/scan/confirm»,
@@ -277,5 +313,41 @@ def main(root: Path, apply: bool) -> None:
     print(f"Готово: {len(left)} файлов, {size(left)} КБ")
 
 
+def restore_sessions(root: Path, archive: Path, apply: bool) -> None:
+    """Дописать визиты из архива в уже почищенные файлы (первая версия чистки
+    выбрасывала чтение целиком, и визиты без изменений пропали)."""
+    users_dir = root / "logs" / "users"
+    people = load_people(root)
+    ids = sorted(people, key=len, reverse=True)
+    current = {p.name.split(".log")[0]: p for p in users_dir.iterdir() if p.is_file()}
+    by_uid: dict[str, list[str]] = defaultdict(list)
+    with zipfile.ZipFile(archive) as z:
+        for n in z.namelist():
+            stem = Path(n).name.split(".log")[0]
+            uid = owner_of(stem, ids)
+            if uid:
+                text = z.read(n).decode("utf-8", errors="replace")
+                by_uid[uid] += [e for e in text.splitlines() if LINE_START.match(e)]
+    for uid, entries in sorted(by_uid.items()):
+        visits = sessions(entries)
+        if not visits:
+            continue
+        target = next((p for stem, p in current.items() if owner_of(stem, [uid])), None)
+        if target is None:
+            label = safe(people.get(uid) or "")
+            target = users_dir / (f"{uid}_{label}.log" if label else f"{uid}.log")
+        existing = target.read_text(encoding="utf-8").splitlines() if target.exists() else []
+        have = set(existing)
+        add = [v for v in visits if v not in have]
+        print(f"{target.name}: +{len(add)} визитов")
+        if apply and add:
+            merged = sorted(existing + add, key=lambda x: x[:23])
+            target.write_text("\n".join(merged) + "\n", encoding="utf-8")
+
+
 if __name__ == "__main__":
-    main(Path(sys.argv[1]), "--apply" in sys.argv)
+    if "--sessions-from" in sys.argv:
+        restore_sessions(Path(sys.argv[1]), Path(sys.argv[sys.argv.index("--sessions-from") + 1]),
+                         "--apply" in sys.argv)
+    else:
+        main(Path(sys.argv[1]), "--apply" in sys.argv)
