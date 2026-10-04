@@ -91,13 +91,6 @@ def check(record: dict[str, Any]) -> dict[str, Any]:
     return info
 
 
-def _since_line(info: dict[str, Any], amount: float) -> str:
-    since = info.get("since")
-    when = f" (с {since[8:10]}.{since[5:7]})" if since and len(since) >= 10 else ""
-    return (f"📊 Авансов с последней ЗП{when}: {_rub(info['since_total'] + amount)} "
-            f"из {_rub(info['limit'])}, включая этот")
-
-
 async def handle_new_request(telegram_service, record: dict[str, Any]) -> bool:
     """Новая заявка сотрудника: одобрить автоматически или отправить на
     решение с кнопками. True — одобрена автоматически."""
@@ -108,7 +101,7 @@ async def handle_new_request(telegram_service, record: dict[str, Any]) -> bool:
     if not info["ok"] or bot is None:
         extra = ""
         if record.get("payout_type") == ADVANCE_TYPE and info["reason"].startswith("сверх"):
-            extra = f"⚠️ Не одобрено автоматически — {info['reason']}"
+            extra = f"⚠️ Не одобрено автоматически — превышен лимит {_rub(info['limit'])}"
         await telegram_service.send_payout_request_to_admin(record, extra=extra)
         return False
 
@@ -119,8 +112,5 @@ async def handle_new_request(telegram_service, record: dict[str, Any]) -> bool:
         await telegram_service.send_payout_request_to_admin(record)
         return False
     log.info("Аванс %s (%s, %s ₽) одобрен автоматически", record.get("id"), record.get("name"), record.get("amount"))
-    lines = [_since_line(info, float(record.get("amount") or 0))]
-    if result["cashier_line"]:
-        lines.append(result["cashier_line"])
-    await telegram_service.send_payout_auto_approved_to_admin(record, "\n".join(lines))
+    await telegram_service.send_payout_auto_approved_to_admin(record, result["cashier_line"])
     return True

@@ -83,7 +83,7 @@ def test_auto_approved_notifies_without_buttons(env, monkeypatch):
     assert approved == [1]
     kind, extra = tg.calls[0]
     assert kind == "auto"
-    assert "30 000 ₽ из 85 000 ₽" in extra and "Основной кассир" in extra
+    assert extra == "📬 Чат кассира: Основной кассир"   # без сумм авансов с последней ЗП
 
 
 def test_over_limit_sent_with_buttons_and_reason(env, monkeypatch):
@@ -93,7 +93,7 @@ def test_over_limit_sent_with_buttons_and_reason(env, monkeypatch):
     env["since_total"] = 80000
     assert asyncio.run(aa.handle_new_request(tg, _req(10000))) is False
     kind, extra = tg.calls[0]
-    assert kind == "request" and "сверх лимита" in extra
+    assert kind == "request" and extra == "⚠️ Не одобрено автоматически — превышен лимит 85 000 ₽"
 
 
 def test_already_handled_falls_back_to_manual(env, monkeypatch):
