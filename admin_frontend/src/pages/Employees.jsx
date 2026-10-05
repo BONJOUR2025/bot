@@ -167,6 +167,9 @@ const PAYOUT_METHODS = ['💳 На карту', '🏦 Из кассы', '🤝 Н
  *  авансов вместо общего (app/services/payout_auto_approval.py). */
 function PayoutRules({ form, setForm }) {
   const chosen = form.payout_methods || [];
+  // Запрет автоодобрения хранится как свой лимит 0 (payout_auto_approval).
+  const autoOff = form.advance_auto_limit !== '' && form.advance_auto_limit != null
+    && Number(form.advance_auto_limit) === 0;
   const toggle = (m) => {
     const next = chosen.includes(m) ? chosen.filter((x) => x !== m) : [...chosen, m];
     setForm({ ...form, payout_methods: PAYOUT_METHODS.filter((x) => next.includes(x)) });
@@ -190,17 +193,28 @@ function PayoutRules({ form, setForm }) {
             : 'В боте и личном кабинете сотрудник увидит только отмеченные способы.'}
         </p>
       </div>
-      <div>
-        <label className="block text-xs font-medium text-[color:var(--color-muted-foreground)] mb-1">
-          Лимит автоодобрения авансов, ₽ с последней зарплаты
-        </label>
-        <input type="number" min="0" step="1000" className="modal-control" placeholder="общий из настроек"
-          value={form.advance_auto_limit ?? ''}
-          onChange={(e) => setForm({ ...form, advance_auto_limit: e.target.value })} />
-        <p className="text-xs text-[color:var(--color-muted-foreground)] mt-1">
-          Пусто — общий лимит из «Настройки → Общие». 0 — авансы этого сотрудника всегда на ручное одобрение.
+      <label className="flex items-center gap-2 text-sm">
+        <input type="checkbox" checked={autoOff}
+          onChange={(e) => setForm({ ...form, advance_auto_limit: e.target.checked ? 0 : '' })} />
+        Не одобрять авансы автоматически
+      </label>
+      {autoOff ? (
+        <p className="text-xs text-[color:var(--color-muted-foreground)] -mt-1">
+          Каждый аванс этого сотрудника придёт в бот с кнопками «Разрешить / Отклонить».
         </p>
-      </div>
+      ) : (
+        <div>
+          <label className="block text-xs font-medium text-[color:var(--color-muted-foreground)] mb-1">
+            Лимит автоодобрения авансов, ₽ с последней зарплаты
+          </label>
+          <input type="number" min="1" step="1000" className="modal-control" placeholder="общий из настроек"
+            value={form.advance_auto_limit ?? ''}
+            onChange={(e) => setForm({ ...form, advance_auto_limit: e.target.value })} />
+          <p className="text-xs text-[color:var(--color-muted-foreground)] mt-1">
+            Пусто — общий лимит из «Настройки → Общие».
+          </p>
+        </div>
+      )}
     </div>
   );
 }
@@ -245,7 +259,8 @@ export default function Employees() {
   const [cashierChats, setCashierChats] = useState([]);
   const [filterName, setFilterName] = useState('');
   const [filterPhone, setFilterPhone] = useState('');
-  const [sort, setSort] = useState('');
+  // По умолчанию — группами по должностям, внутри по алфавиту.
+  const [sort, setSort] = useState('group');
   const [selected, setSelected] = useState([]);
   const [form, setForm] = useState(emptyForm);
   // «Должность» — выпадающий список уже существующих значений плюс ручной
@@ -556,12 +571,22 @@ export default function Employees() {
       (!workplaceFilter || (e.work_place || 'Не указано') === workplaceFilter)
   );
 
-  const sortedList = [...filtered];
-  if (sort === 'name') {
-    sortedList.sort((a, b) => a.full_name.localeCompare(b.full_name));
-  } else if (sort === 'position') {
-    sortedList.sort((a, b) => a.position.localeCompare(b.position));
-  }
+  const byName = (a, b) => (a.full_name || a.name || '').localeCompare(b.full_name || b.name || '', 'ru');
+  const sortedList = [...filtered].sort(byName);
+  // Группы по должностям: должности по алфавиту, «Без должности» в конце.
+  const groups = useMemo(() => {
+    const map = new Map();
+    for (const e of sortedList) {
+      const key = (e.position || '').trim() || 'Без должности';
+      if (!map.has(key)) map.set(key, []);
+      map.get(key).push(e);
+    }
+    return [...map.entries()].sort(([a], [b]) => {
+      if (a === 'Без должности') return 1;
+      if (b === 'Без должности') return -1;
+      return a.localeCompare(b, 'ru');
+    });
+  }, [sortedList]);
 
   const activeCount = useMemo(() => employees.filter((e) => e.status === 'active').length, [employees]);
   const adminCount = useMemo(() => employees.filter((e) => e.is_admin).length, [employees]);
@@ -849,9 +874,8 @@ export default function Employees() {
           value={sort}
           onChange={(e) => setSort(e.target.value)}
         >
-          <option value="">Без сортировки</option>
-          <option value="name">По имени</option>
-          <option value="position">По должности</option>
+          <option value="group">Группами по должностям</option>
+          <option value="name">По алфавиту</option>
         </select>
       </div>
 
@@ -889,141 +913,151 @@ export default function Employees() {
           <SkeletonTable rows={8} cols={6} />
         </div>
       ) : (
-        <ResponsiveTable
-          data={sortedList}
-          keyFn={(e) => e.id}
-          emptyText="Нет сотрудников"
-          rowClass={() => 'cursor-pointer'}
-          rowState={(e) => (e.status !== 'active' ? 'disabled' : e.is_admin ? 'selected' : null)}
-          columns={[
-            {
-              label: '',
-              cellClass: 'w-10',
-              render: (e) => (
-                <span onClick={(ev) => ev.stopPropagation()}>
-                  <input
-                    type="checkbox"
-                    checked={selected.includes(e.id)}
-                    onChange={(ev) => toggleSelect(e.id, ev.target.checked)}
-                  />
-                </span>
-              ),
-            },
-            {
-              label: 'Фото',
-              mobileHide: true,
-              render: (e) => (
-                <span onClick={(ev) => ev.stopPropagation()}>
-                  {e.photo_url ? (
-                    <img
-                      src={e.photo_url}
-                      alt=""
-                      className="w-8 h-8 rounded-full object-cover cursor-pointer"
-                      onClick={() => window.open(e.photo_url, '_blank')}
-                    />
-                  ) : (
-                    /* Инициалы вместо прочерка: колонка из тридцати
-                       четырёх одинаковых «—» ничего не сообщала, а
-                       человек в списке людей должен быть узнаваем. */
-                    <div className="employee-avatar">{initialsOf(e.full_name)}</div>
-                  )}
-                </span>
-              ),
-            },
-            {
-              label: 'ФИО',
-              primary: true,
-              render: (e) => (
-                <span onClick={() => navigate(`/admin/employees/${e.id}`)} className="inline-flex items-center gap-1.5">
-                  {/* На телефоне колонка «Фото» скрыта, и человек в списке
-                      людей оставался без лица — метка едет вместе с именем
-                      в шапку карточки. */}
-                  <span className="mr-1 sm:hidden">
-                    {e.photo_url
-                      ? <img src={e.photo_url} alt="" className="h-7 w-7 rounded-full object-cover" />
-                      : <span className="employee-avatar">{initialsOf(e.full_name)}</span>}
-                  </span>
-                  {/* Радар-пинг вместо статичной пометки — активный сотрудник
-                      без номера карты (тот же флаг, что и КPI «Без карты» на
-                      «Обзоре») это то, что реально требует внимания сейчас. */}
-                  {!e.card_number && e.status === 'active' && (
-                    /* Тот же случай, что и в подборе персонала: радар стоял
-                       на каждой строке без номера карты — девять анимаций
-                       в кадре. Состояние строки помечает статичный маркер. */
-                    <span className="fui-status fui-status--warning" title="Нет номера карты - требует внимания" />
-                  )}
-                  <span className="employee-name">{e.full_name}</span>
-                  {/* Роль набрана служебной моношкалой, а не оранжевым:
-                      цвет в этой системе означает состояние, а админ —
-                      это признак, а не тревога. */}
-                  {e.is_admin && <span className="employee-role">админ</span>}
-                </span>
-              ),
-            },
-            // Служебное имя (логин в боте) — вторичное поле: набрано
-            // тем же весом, что ФИО, и две колонки имён спорили между
-            // собой за то, какая из них настоящая.
-            { label: 'Имя', key: 'name', mobileHide: true, cellClass: 'text-[color:var(--color-text-faint)]' },
-            { label: 'Телефон', key: 'phone', numeric: true },
-            {
-              label: 'День рождения',
-              numeric: true,
-              render: (e) => formatDateRu(e.birthdate),
-            },
-            { label: 'Должность', key: 'position' },
-            {
-              label: 'В компании',
-              mobileHide: true,
-              numeric: true,
-              render: (e) => {
-                const tenure = formatTenure(e.created_at);
-                // Без префикса «СТАЖ:»: заголовок колонки уже сказал это
-                // один раз, в строках он повторялся тридцать четыре раза.
-                return tenure || <span className="text-[color:var(--color-text-faint)]">—</span>;
-              },
-            },
-            {
-              label: '',
-              isAction: true,
-              cellClass: 'text-right',
-              render: (e) => {
-                const canArchive = e.status !== 'active';
-                const archiveTitle = canArchive
-                  ? 'Перенести в архив'
-                  : 'Переведите сотрудника в статус inactive, чтобы архивировать';
-                return (
-                  <span className="inline-flex items-center gap-2" onClick={(ev) => ev.stopPropagation()}>
-                    {/* Иконки действий — одной нейтральной шкалой. Синий и
-                        янтарный литералами не входят в палитру и читались
-                        как состояния, которых у строки нет. */}
-                    <button className="text-[color:var(--color-text-muted)] transition-colors hover:text-[color:var(--color-primary)]" onClick={() => startEdit(e)} title="Редактировать">
-                      <Pencil size={16} />
-                    </button>
-                    <a
-                      href={`/api/employees/${e.id}/profile.pdf`}
-                      className="text-[color:var(--color-text-muted)]"
-                      title="Скачать PDF"
-                    >
-                      <FileDown size={16} />
-                    </a>
-                    <button
-                      className={
-                        canArchive
-                          ? 'text-[color:var(--color-text-muted)] transition-colors hover:text-[color:var(--color-text)]'
-                          : 'cursor-not-allowed text-[color:var(--color-text-faint)]'
-                      }
-                      onClick={() => { if (canArchive) moveToArchive(e.id); }}
-                      disabled={!canArchive}
-                      title={archiveTitle}
-                    >
-                      <Archive size={16} className={!canArchive ? 'opacity-50' : ''} />
-                    </button>
-                  </span>
-                );
-              },
-            },
-          ]}
-        />
+        (sort === 'group' && groups.length > 1 ? groups : [[null, sortedList]]).map(([title, rows]) => (
+          <div key={title || 'all'} className="space-y-2">
+            {title && (
+              <h3 className="flex items-baseline gap-2 pt-2 text-sm font-semibold text-[color:var(--color-text)]">
+                {title}
+                <span className="text-xs font-normal text-[color:var(--color-muted-foreground)]">{rows.length}</span>
+              </h3>
+            )}
+            <ResponsiveTable
+              data={rows}
+              keyFn={(e) => e.id}
+              emptyText="Нет сотрудников"
+              rowClass={() => 'cursor-pointer'}
+              rowState={(e) => (e.status !== 'active' ? 'disabled' : e.is_admin ? 'selected' : null)}
+              columns={[
+                {
+                  label: '',
+                  cellClass: 'w-10',
+                  render: (e) => (
+                    <span onClick={(ev) => ev.stopPropagation()}>
+                      <input
+                        type="checkbox"
+                        checked={selected.includes(e.id)}
+                        onChange={(ev) => toggleSelect(e.id, ev.target.checked)}
+                      />
+                    </span>
+                  ),
+                },
+                {
+                  label: 'Фото',
+                  mobileHide: true,
+                  render: (e) => (
+                    <span onClick={(ev) => ev.stopPropagation()}>
+                      {e.photo_url ? (
+                        <img
+                          src={e.photo_url}
+                          alt=""
+                          className="w-8 h-8 rounded-full object-cover cursor-pointer"
+                          onClick={() => window.open(e.photo_url, '_blank')}
+                        />
+                      ) : (
+                        /* Инициалы вместо прочерка: колонка из тридцати
+                           четырёх одинаковых «—» ничего не сообщала, а
+                           человек в списке людей должен быть узнаваем. */
+                        <div className="employee-avatar">{initialsOf(e.full_name)}</div>
+                      )}
+                    </span>
+                  ),
+                },
+                {
+                  label: 'ФИО',
+                  primary: true,
+                  render: (e) => (
+                    <span onClick={() => navigate(`/admin/employees/${e.id}`)} className="inline-flex items-center gap-1.5">
+                      {/* На телефоне колонка «Фото» скрыта, и человек в списке
+                          людей оставался без лица — метка едет вместе с именем
+                          в шапку карточки. */}
+                      <span className="mr-1 sm:hidden">
+                        {e.photo_url
+                          ? <img src={e.photo_url} alt="" className="h-7 w-7 rounded-full object-cover" />
+                          : <span className="employee-avatar">{initialsOf(e.full_name)}</span>}
+                      </span>
+                      {/* Радар-пинг вместо статичной пометки — активный сотрудник
+                          без номера карты (тот же флаг, что и КPI «Без карты» на
+                          «Обзоре») это то, что реально требует внимания сейчас. */}
+                      {!e.card_number && e.status === 'active' && (
+                        /* Тот же случай, что и в подборе персонала: радар стоял
+                           на каждой строке без номера карты — девять анимаций
+                           в кадре. Состояние строки помечает статичный маркер. */
+                        <span className="fui-status fui-status--warning" title="Нет номера карты - требует внимания" />
+                      )}
+                      <span className="employee-name">{e.full_name}</span>
+                      {/* Роль набрана служебной моношкалой, а не оранжевым:
+                          цвет в этой системе означает состояние, а админ —
+                          это признак, а не тревога. */}
+                      {e.is_admin && <span className="employee-role">админ</span>}
+                    </span>
+                  ),
+                },
+                // Служебное имя (логин в боте) — вторичное поле: набрано
+                // тем же весом, что ФИО, и две колонки имён спорили между
+                // собой за то, какая из них настоящая.
+                { label: 'Имя', key: 'name', mobileHide: true, cellClass: 'text-[color:var(--color-text-faint)]' },
+                { label: 'Телефон', key: 'phone', numeric: true },
+                {
+                  label: 'День рождения',
+                  numeric: true,
+                  render: (e) => formatDateRu(e.birthdate),
+                },
+                { label: 'Должность', key: 'position' },
+                {
+                  label: 'В компании',
+                  mobileHide: true,
+                  numeric: true,
+                  render: (e) => {
+                    const tenure = formatTenure(e.created_at);
+                    // Без префикса «СТАЖ:»: заголовок колонки уже сказал это
+                    // один раз, в строках он повторялся тридцать четыре раза.
+                    return tenure || <span className="text-[color:var(--color-text-faint)]">—</span>;
+                  },
+                },
+                {
+                  label: '',
+                  isAction: true,
+                  cellClass: 'text-right',
+                  render: (e) => {
+                    const canArchive = e.status !== 'active';
+                    const archiveTitle = canArchive
+                      ? 'Перенести в архив'
+                      : 'Переведите сотрудника в статус inactive, чтобы архивировать';
+                    return (
+                      <span className="inline-flex items-center gap-2" onClick={(ev) => ev.stopPropagation()}>
+                        {/* Иконки действий — одной нейтральной шкалой. Синий и
+                            янтарный литералами не входят в палитру и читались
+                            как состояния, которых у строки нет. */}
+                        <button className="text-[color:var(--color-text-muted)] transition-colors hover:text-[color:var(--color-primary)]" onClick={() => startEdit(e)} title="Редактировать">
+                          <Pencil size={16} />
+                        </button>
+                        <a
+                          href={`/api/employees/${e.id}/profile.pdf`}
+                          className="text-[color:var(--color-text-muted)]"
+                          title="Скачать PDF"
+                        >
+                          <FileDown size={16} />
+                        </a>
+                        <button
+                          className={
+                            canArchive
+                              ? 'text-[color:var(--color-text-muted)] transition-colors hover:text-[color:var(--color-text)]'
+                              : 'cursor-not-allowed text-[color:var(--color-text-faint)]'
+                          }
+                          onClick={() => { if (canArchive) moveToArchive(e.id); }}
+                          disabled={!canArchive}
+                          title={archiveTitle}
+                        >
+                          <Archive size={16} className={!canArchive ? 'opacity-50' : ''} />
+                        </button>
+                      </span>
+                    );
+                  },
+                },
+              ]}
+            />
+          </div>
+        ))
       )}
         </>
       )}
