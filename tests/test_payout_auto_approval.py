@@ -16,9 +16,14 @@ def env(monkeypatch):
         lambda *a, **k: SimpleNamespace(advances_since_last_salary=lambda uid: {
             "total": state["since_total"], "count": 1, "since": state["since"]}),
     )
+    from app.core.enums import EmployeeStatus
+
+    # Настоящий тип статуса — EmployeeStatus, а не строка: на строке тест
+    # проходил, а в проде активная сотрудница считалась неактивной.
     monkeypatch.setattr(
         "app.data.employee_repository.EmployeeRepository",
-        lambda *a, **k: SimpleNamespace(get_employee=lambda uid: SimpleNamespace(status=state["status"])),
+        lambda *a, **k: SimpleNamespace(get_employee=lambda uid: SimpleNamespace(
+            status=EmployeeStatus(state["status"]))),
     )
     return state
 

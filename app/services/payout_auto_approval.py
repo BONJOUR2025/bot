@@ -69,7 +69,12 @@ def check(record: dict[str, Any]) -> dict[str, Any]:
         emp = EmployeeRepository().get_employee(str(record.get("user_id")))
     except Exception:
         emp = None
-    if emp is None or (getattr(emp, "status", "active") or "active") != "active":
+    # status — EmployeeStatus (обычный Enum, не str): со строкой «active»
+    # он не равен никогда. Так первая же заявка (1186, 05.10) ушла на ручное
+    # решение с причиной «неактивен».
+    status = getattr(emp, "status", None) if emp is not None else None
+    status = getattr(status, "value", status) or "active"
+    if emp is None or status != "active":
         info["reason"] = "сотрудник не найден или неактивен"
         return info
     try:
