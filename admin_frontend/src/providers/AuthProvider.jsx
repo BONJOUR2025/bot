@@ -16,23 +16,33 @@ export function AuthProvider({ children }) {
   useEffect(() => {
     let active = true;
 
-    const loadProfile = async () => {
+    // Вход стираем, только когда сервер прямо ответил 401 — токен
+    // недействителен. Раньше его стирала любая ошибка при запуске: телефон
+    // только проснулся и сети ещё нет, моргнул туннель, сервер
+    // перезапускается после деплоя — и мастер с действующим 30-дневным
+    // входом снова видел экран пароля. При сетевой ошибке или 5xx
+    // повторяем, пока связь не появится.
+    const RETRY_DELAYS_MS = [1500, 3000, 5000, 8000, 12000];
+
+    const loadProfile = async (attempt = 0) => {
       try {
         const res = await api.get('auth/me');
         if (active) {
           setUser(res.data);
-        }
-      } catch (err) {
-        if (localStorage.getItem('auth_token')) {
-          localStorage.removeItem('auth_token');
-        }
-        if (active) {
-          setUser(null);
-        }
-      } finally {
-        if (active) {
           setLoading(false);
         }
+      } catch (err) {
+        const status = err?.response?.status;
+        const hasToken = !!localStorage.getItem('auth_token');
+        if (status === 401 || !hasToken || attempt >= RETRY_DELAYS_MS.length) {
+          if (status === 401 && hasToken) localStorage.removeItem('auth_token');
+          if (active) {
+            setUser(null);
+            setLoading(false);
+          }
+          return;
+        }
+        setTimeout(() => { if (active) loadProfile(attempt + 1); }, RETRY_DELAYS_MS[attempt]);
       }
     };
 

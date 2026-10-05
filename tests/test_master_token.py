@@ -110,3 +110,24 @@ def test_login_names_are_short():
     assert acs.short_person_name("Руслан") == "Руслан"
     assert acs.short_person_name("  ") == ""
 
+
+
+def test_senior_master_with_only_workshop_gets_long_token(tmp_path, monkeypatch):
+    """Старший мастер: право «Цех» — это раздел того же приложения мастера,
+    а не доступ к панели; с 12 часами он вводил пароль каждый день."""
+    record = _record("700", role_id="master")
+    record["permissions"] = ["workshop"]
+    svc = _service(tmp_path, users=[record])
+    resolved = svc.resolve_user("700")
+    assert resolved.permissions == ["workshop"]
+    assert svc.token_ttl_for(resolved) == acs.MASTER_TOKEN_TTL_SECONDS
+    token = svc.issue_token("700")
+    _age(monkeypatch, 20 * DAY)
+    assert svc.verify_token(token).employee_id == "700"
+
+
+def test_master_with_workshop_and_money_rights_keeps_12_hours(tmp_path):
+    record = _record("700", role_id="master")
+    record["permissions"] = ["workshop", "payouts"]
+    svc = _service(tmp_path, users=[record])
+    assert svc.token_ttl_for(svc.resolve_user("700")) == acs.TOKEN_TTL_SECONDS

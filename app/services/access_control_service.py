@@ -147,6 +147,9 @@ TOKEN_TTL_SECONDS = 60 * 60 * 12
 # мастером (перевели, уволили), его токен снова живёт 12 часов — срок
 # считается при каждой проверке, а не зашивается в токен.
 MASTER_TOKEN_TTL_SECONDS = 60 * 60 * 24 * 30
+# Права, с которыми мастеру всё ещё положен длинный срок: «Цех» старшего
+# мастера — часть того же приложения (см. token_ttl_for).
+MASTER_LONG_TOKEN_PERMISSIONS = frozenset({"workshop"})
 
 
 @dataclass
@@ -876,11 +879,14 @@ class AccessControlService:
     def token_ttl_for(user: ResolvedUser) -> int:
         """Срок жизни токена этого пользователя, секунды.
 
-        Длинный — только у мастера без прав в панели (см.
-        MASTER_TOKEN_TTL_SECONDS). Считается при каждой проверке токена, так
-        что смена должности или выдача прав сразу возвращают 12 часов.
+        Длинный — у мастера без прав в панели (см. MASTER_TOKEN_TTL_SECONDS).
+        Старший мастер — тоже: его единственное право «workshop» и есть
+        раздел «Цех» в том же приложении мастера, а не доступ к деньгам или
+        сотрудникам; с 12 часами он вводил пароль каждый день. Считается при
+        каждой проверке токена, так что смена должности или выдача других
+        прав сразу возвращают 12 часов.
         """
-        if user.is_master and not user.permissions:
+        if user.is_master and set(user.permissions) <= MASTER_LONG_TOKEN_PERMISSIONS:
             return MASTER_TOKEN_TTL_SECONDS
         return TOKEN_TTL_SECONDS
 

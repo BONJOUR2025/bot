@@ -8,6 +8,24 @@ from app.services.access_control_service import (
 )
 
 
+def _log_rejected_token(token: str, reason: str, request: Request) -> None:
+    """Чей вход отклонён и почему — в connections.log. Без этого «мастера
+    выкидывает на ввод пароля» нечем было проверить: в журнале сервера были
+    только безымянные 401. id берём из токена без проверки подписи — для
+    журнала этого достаточно, доступа это не даёт."""
+    try:
+        import base64
+
+        from app.utils.logger import log_connection
+
+        user_id = base64.urlsafe_b64decode(token.encode()).decode("utf-8", "replace").split(":", 1)[0][:40]
+        ua = request.headers.get("user-agent", "")
+        where = "приложение мастера" if "BonjourMasterApp" in ua else ("iOS" if "iPhone" in ua else "браузер")
+        log_connection(f"Вход отклонён: пользователь {user_id}, причина {reason}, {where}")
+    except Exception:
+        pass
+
+
 async def get_current_user(
     request: Request,
     authorization: str = Header(default=None),
@@ -27,6 +45,7 @@ async def get_current_user(
         user = service.verify_token(token)
     except ValueError as exc:  # pragma: no cover - mapped to HTTP error
         detail = str(exc) or "invalid_token"
+        _log_rejected_token(token, detail, request)
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=detail)
     request.state.user = user
     return user
