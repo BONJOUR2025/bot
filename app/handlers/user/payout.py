@@ -13,6 +13,7 @@ from ...services.advance_requests import (
     load_advance_requests,
     log_new_request,
 )
+from ...services import payout_methods
 from ...services.telegram_service import TelegramService
 from app.data.employee_repository import EmployeeRepository
 from ...utils.logger import log
@@ -170,19 +171,21 @@ async def enter_amount(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Pa
             return ConversationHandler.END
 
     data["amount"] = amount
-    keyboard = ReplyKeyboardMarkup(
-        [["💳 На карту", "🏦 Из кассы", "🤝 Наличными"], ["🏠 Домой"]],
-        resize_keyboard=True,
-    )
-    await update.message.reply_text(
-        "Выберите способ получения:", reply_markup=keyboard
-    )
+    # Способы, закреплённые за сотрудником в карточке (только наличные и т.п.).
+    methods = payout_methods.allowed_for_id(user_id)
+    data["allowed_methods"] = methods
+    keyboard = ReplyKeyboardMarkup([methods, ["🏠 Домой"]], resize_keyboard=True)
+    prompt = "Выберите способ получения:"
+    if len(methods) < len(payout_methods.ALL_METHODS):
+        prompt = f"Выплата вам — {payout_methods.describe(methods)}. Выберите способ получения:"
+    await update.message.reply_text(prompt, reply_markup=keyboard)
     return PayoutStates.SELECT_METHOD
 
 
 async def select_method(update: Update, context: ContextTypes.DEFAULT_TYPE) -> PayoutStates:
     method = update.message.text.strip()
-    if method not in {"💳 На карту", "🏦 Из кассы", "🤝 Наличными"}:
+    allowed = context.user_data.get("payout_data", {}).get("allowed_methods") or payout_methods.ALL_METHODS
+    if method not in allowed:
         await update.message.reply_text(
             "❌ Пожалуйста, выберите из предложенных вариантов."
         )

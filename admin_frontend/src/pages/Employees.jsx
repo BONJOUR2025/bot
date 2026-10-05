@@ -160,6 +160,51 @@ function ExternalUserSelect({ value, onChange }) {
   );
 }
 
+const PAYOUT_METHODS = ['💳 На карту', '🏦 Из кассы', '🤝 Наличными'];
+
+/** Правила выплат сотрудника: какими способами ему платить (бот и кабинет
+ *  покажут только их, сервер не примет другой) и свой лимит автоодобрения
+ *  авансов вместо общего (app/services/payout_auto_approval.py). */
+function PayoutRules({ form, setForm }) {
+  const chosen = form.payout_methods || [];
+  const toggle = (m) => {
+    const next = chosen.includes(m) ? chosen.filter((x) => x !== m) : [...chosen, m];
+    setForm({ ...form, payout_methods: PAYOUT_METHODS.filter((x) => next.includes(x)) });
+  };
+  return (
+    <div className="rounded-lg border border-[color:var(--color-border)] p-3 space-y-3">
+      <div className="text-sm font-medium text-[color:var(--color-text)]">Выплаты</div>
+      <div>
+        <div className="text-xs font-medium text-[color:var(--color-muted-foreground)] mb-1">Способы выплаты</div>
+        <div className="flex flex-wrap gap-x-4 gap-y-1">
+          {PAYOUT_METHODS.map((m) => (
+            <label key={m} className="flex items-center gap-1.5 text-sm">
+              <input type="checkbox" checked={chosen.includes(m)} onChange={() => toggle(m)} />
+              {m}
+            </label>
+          ))}
+        </div>
+        <p className="text-xs text-[color:var(--color-muted-foreground)] mt-1">
+          {chosen.length === 0
+            ? 'Ничего не отмечено — сотрудник может выбрать любой способ.'
+            : 'В боте и личном кабинете сотрудник увидит только отмеченные способы.'}
+        </p>
+      </div>
+      <div>
+        <label className="block text-xs font-medium text-[color:var(--color-muted-foreground)] mb-1">
+          Лимит автоодобрения авансов, ₽ с последней зарплаты
+        </label>
+        <input type="number" min="0" step="1000" className="modal-control" placeholder="общий из настроек"
+          value={form.advance_auto_limit ?? ''}
+          onChange={(e) => setForm({ ...form, advance_auto_limit: e.target.value })} />
+        <p className="text-xs text-[color:var(--color-muted-foreground)] mt-1">
+          Пусто — общий лимит из «Настройки → Общие». 0 — авансы этого сотрудника всегда на ручное одобрение.
+        </p>
+      </div>
+    </div>
+  );
+}
+
 export default function Employees() {
   const { toast } = useToast();
   const navigate = useNavigate();
@@ -188,6 +233,8 @@ export default function Employees() {
     photo_file: null,
     photo_url: '',
     payout_chat_key: '',
+    payout_methods: [],
+    advance_auto_limit: '',
     archived: false,
   };
 
@@ -361,7 +408,11 @@ export default function Employees() {
 
   function startEdit(emp) {
     const isBotUser = emp.bot_user ?? (!String(emp.id).startsWith('nb_') && !!emp.id);
-    setForm({ ...emp, id: emp.id, id_original: emp.id, bot_user: isBotUser, payout_chat_key: emp.payout_chat_key || '' });
+    setForm({
+      ...emp, id: emp.id, id_original: emp.id, bot_user: isBotUser, payout_chat_key: emp.payout_chat_key || '',
+      payout_methods: emp.payout_methods || [],
+      advance_auto_limit: emp.advance_auto_limit ?? '',
+    });
     setPositionCustom(!!emp.position && !positions.includes(emp.position));
     setShowForm(true);
   }
@@ -424,6 +475,10 @@ export default function Employees() {
       bot_user: form.bot_user,
       vk_id: form.vk_id || '',
       payout_chat_key: form.payout_chat_key || null,
+      // Пусто — все способы; не задан лимит — общий из «Настройки → Общие».
+      payout_methods: form.payout_methods || [],
+      advance_auto_limit: form.advance_auto_limit === '' || form.advance_auto_limit == null
+        ? null : Math.max(0, Math.round(Number(form.advance_auto_limit))),
     };
     try {
       if (form.id_original) {
@@ -1094,6 +1149,8 @@ export default function Employees() {
                 </select>
               </div>
             </div>
+
+            <PayoutRules form={form} setForm={setForm} />
 
             <div>
               <label className="block text-xs font-medium text-[color:var(--color-muted-foreground)] mb-1">Внешний код (ID в Агбис, для кассовых перемещений)</label>

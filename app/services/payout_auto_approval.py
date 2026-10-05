@@ -16,7 +16,8 @@
 выключен (0) — такие заявки идут на ручное решение, как раньше. Заявки,
 которые админ создаёт сам в панели, сюда не попадают: это уже его решение.
 
-Лимит — config.json, ключ payout_auto_approve_limit («Настройки → Общие»).
+Лимит — config.json, ключ payout_auto_approve_limit («Настройки → Общие»);
+у сотрудника может быть свой — advance_auto_limit в карточке (0 — никогда).
 """
 from __future__ import annotations
 
@@ -51,12 +52,12 @@ def _rub(v: float) -> str:
 
 def check(record: dict[str, Any]) -> dict[str, Any]:
     """Можно ли одобрить автоматически. {"ok", "reason", "since_total",
-    "since", "limit"}; reason — почему нет (для пометки в уведомлении)."""
+    "since", "limit"}; reason — почему нет (для пометки в уведомлении).
+
+    Лимит — свой у сотрудника (advance_auto_limit в карточке), если задан,
+    иначе общий из настроек; 0 — этому сотруднику автоматически никогда."""
     cap = limit()
     info: dict[str, Any] = {"ok": False, "reason": "", "since_total": 0.0, "since": None, "limit": cap}
-    if cap <= 0:
-        info["reason"] = "автоодобрение выключено"
-        return info
     if (record.get("payout_type") or "") != ADVANCE_TYPE:
         info["reason"] = "не аванс"
         return info
@@ -76,6 +77,16 @@ def check(record: dict[str, Any]) -> dict[str, Any]:
     status = getattr(status, "value", status) or "active"
     if emp is None or status != "active":
         info["reason"] = "сотрудник не найден или неактивен"
+        return info
+    own = getattr(emp, "advance_auto_limit", None)
+    if own is not None and str(own).strip() != "":
+        try:
+            cap = max(0, int(float(own)))
+        except (TypeError, ValueError):
+            pass
+    info["limit"] = cap
+    if cap <= 0:
+        info["reason"] = "автоодобрение выключено"
         return info
     try:
         from app.data.payout_repository import PayoutRepository

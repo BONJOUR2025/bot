@@ -78,14 +78,23 @@ async def enter_amount(bot: Bot, message: Message, employee_id: str, payload: di
             await message.answer("❌ Превышен месячный лимит авансов.", keyboard=main_menu(employee_id).get_json())
             return
 
-    await bot.state_dispenser.set(message.peer_id, PayoutStates.SELECT_METHOD, **{**payload, "amount": amount})
-    await message.answer("Выберите способ получения:", keyboard=payout_method_menu().get_json())
+    from app.services import payout_methods
+
+    methods = payout_methods.allowed_for_id(employee_id)
+    await bot.state_dispenser.set(message.peer_id, PayoutStates.SELECT_METHOD,
+                                  **{**payload, "amount": amount, "allowed_methods": methods})
+    prompt = "Выберите способ получения:"
+    if len(methods) < len(payout_methods.ALL_METHODS):
+        prompt = f"Выплата вам — {payout_methods.describe(methods)}. Выберите способ получения:"
+    await message.answer(prompt, keyboard=payout_method_menu(methods).get_json())
 
 
 async def select_method(bot: Bot, message: Message, employee_id: str, payload: dict) -> None:
     method = (message.text or "").strip()
-    if method not in PAYOUT_METHODS:
-        await message.answer("❌ Пожалуйста, выберите из предложенных вариантов.", keyboard=payout_method_menu().get_json())
+    allowed = payload.get("allowed_methods") or sorted(PAYOUT_METHODS)
+    if method not in allowed:
+        await message.answer("❌ Пожалуйста, выберите из предложенных вариантов.",
+                             keyboard=payout_method_menu(payload.get("allowed_methods")).get_json())
         return
 
     text = (

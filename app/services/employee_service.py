@@ -181,6 +181,8 @@ class EmployeeAPIService:
             passport_url=data.passport_url or "",
             external_code=data.external_code or "",
             vk_id=data.vk_id or "",
+            payout_methods=data.payout_methods or [],
+            advance_auto_limit=data.advance_auto_limit,
         )
         try:
             created = self.service.add_employee(employee)

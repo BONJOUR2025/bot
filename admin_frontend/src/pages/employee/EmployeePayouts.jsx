@@ -86,6 +86,13 @@ export default function EmployeePayouts() {
 
   const capApplies = isMaster && cap && form.payout_type === 'Аванс';
 
+  // Способы, закреплённые за сотрудником в карточке (например, только
+  // наличные); пусто — любые. Сервер проверяет то же самое.
+  const allowedMethods = employee?.payout_methods?.length
+    ? METHODS.filter((m) => employee.payout_methods.includes(m))
+    : METHODS;
+  const method = allowedMethods.includes(form.method) ? form.method : allowedMethods[0];
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!employee) return;
@@ -108,7 +115,7 @@ export default function EmployeePayouts() {
         card_number: employee.card_number || '',
         bank: employee.bank || '',
         amount,
-        method: form.method,
+        method,
         payout_type: form.payout_type,
         note: form.note || null,
         // Без этого флага заявка только ложилась в базу: в бот (и кассиру)
@@ -190,8 +197,9 @@ export default function EmployeePayouts() {
               </label>
               <label className="form-field">
                 <span>Способ получения</span>
-                <select name="method" value={form.method} onChange={handleChange} className="emp-select">
-                  {METHODS.map((m) => <option key={m} value={m}>{m}</option>)}
+                <select name="method" value={method} onChange={handleChange} className="emp-select"
+                  disabled={allowedMethods.length === 1}>
+                  {allowedMethods.map((m) => <option key={m} value={m}>{m}</option>)}
                 </select>
               </label>
               <label className="form-field">

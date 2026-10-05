@@ -152,6 +152,16 @@ def create_payout_router(
         self_request = not access_service.user_has_permission(current, PAYOUTS_PERMISSION)
         if self_request:
             data.sync_to_bot = True
+            # Способы, закреплённые за сотрудником в карточке: кабинет их и так
+            # показывает, а здесь — чтобы не обойти запросом в обход формы.
+            from app.services import payout_methods
+
+            allowed = payout_methods.allowed_for_id(data.user_id)
+            if data.method not in allowed:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Выплата вам — {payout_methods.describe(allowed)}.",
+                )
         created = await service.create_payout(data, self_request=self_request)
         note(f"создал заявку на выплату: {data.name}, {data.payout_type}, "
              f"{data.amount:,.0f} ₽".replace(",", " ") + f", {data.method}"

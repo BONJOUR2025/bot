@@ -23,7 +23,7 @@ def env(monkeypatch):
     monkeypatch.setattr(
         "app.data.employee_repository.EmployeeRepository",
         lambda *a, **k: SimpleNamespace(get_employee=lambda uid: SimpleNamespace(
-            status=EmployeeStatus(state["status"]))),
+            status=EmployeeStatus(state["status"]), advance_auto_limit=state.get("own"))),
     )
     return state
 
@@ -116,3 +116,24 @@ def test_limit_from_config(monkeypatch):
         monkeypatch.setattr("app.services.config_service.ConfigService.load",
                             lambda self, raw=raw: {"payout_auto_approve_limit": raw})
         assert aa.limit() == expected
+
+
+def test_own_limit_overrides_global(env):
+    env["since_total"] = 20000
+    env["own"] = 25000
+    info = aa.check(_req(10000))
+    assert not info["ok"] and info["limit"] == 25000
+    env["own"] = 200000
+    env["since_total"] = 150000
+    assert aa.check(_req(10000))["ok"]          # больше общего 85 000, но в пределах своего
+
+
+def test_own_zero_means_never(env):
+    env["own"] = 0
+    assert aa.check(_req(1))["reason"] == "автоодобрение выключено"
+
+
+def test_own_limit_works_when_global_disabled(env):
+    env["limit"] = 0
+    env["own"] = 50000
+    assert aa.check(_req(1000))["ok"]

@@ -64,6 +64,8 @@ class EmployeeRepository:
             "external_code": data.get("external_code", ""),
             "amo_user_id": data.get("amo_user_id", ""),
             "vk_id": data.get("vk_id", ""),
+            "payout_methods": list(data.get("payout_methods") or []),
+            "advance_auto_limit": data.get("advance_auto_limit"),
         }
         return Employee(**record)
 

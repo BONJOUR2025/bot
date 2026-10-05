@@ -26,6 +26,8 @@ class EmployeeBase(BaseModel):
     external_code: str = ""
     amo_user_id: Optional[str] = ""   # amoCRM responsible_user_id (для ЗП менеджеров)
     vk_id: Optional[str] = ""         # VK user id — второй, независимый от Telegram канал
+    payout_methods: list[str] = []    # разрешённые способы выплат; пусто — любые
+    advance_auto_limit: Optional[int] = None  # свой лимит автоодобрения; None — общий
 
 
 class EmployeeCreate(EmployeeBase):

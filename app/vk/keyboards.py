@@ -62,8 +62,9 @@ def payout_type_menu() -> Keyboard:
     return _from_rows([["Аванс", "Зарплата"], [HOME_LABEL]])
 
 
-def payout_method_menu() -> Keyboard:
-    return _from_rows([["💳 На карту", "🏦 Из кассы", "🤝 Наличными"], [HOME_LABEL]])
+def payout_method_menu(methods: list[str] | None = None) -> Keyboard:
+    """methods — способы, закреплённые за сотрудником; None — все."""
+    return _from_rows([methods or ["💳 На карту", "🏦 Из кассы", "🤝 Наличными"], [HOME_LABEL]])
 
 
 def home_only_menu() -> Keyboard:

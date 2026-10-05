@@ -36,3 +36,9 @@ class Employee:
     external_code: str = ""
     amo_user_id: str = ""   # amoCRM responsible_user_id (для ЗП менеджеров)
     vk_id: str = ""         # VK user id — привязывается отдельно от id (который остаётся Telegram id)
+    # Какими способами сотруднику можно выплачивать (app/services/payout_methods.py);
+    # пусто — любыми.
+    payout_methods: List[str] = field(default_factory=list)
+    # Свой лимит автоодобрения авансов, ₽ с последней зарплаты
+    # (app/services/payout_auto_approval.py); None — общий из настроек, 0 — никогда.
+    advance_auto_limit: Optional[int] = None
