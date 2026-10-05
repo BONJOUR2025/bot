@@ -1,8 +1,7 @@
 """Мастер в сессии: признак is_master и срок жизни токена.
 
-Токен мастера без прав в панели живёт 30 дней, остальные — 12 часов. Срок
-считается при каждой проверке, а не зашивается в токен: перестал быть
-мастером — старый токен снова подчиняется 12 часам.
+Токен живёт 30 дней у всех (с 05.10.2026; раньше 12 часов у всех, кроме
+мастеров). Лишение доступа действует сразу — проверка при каждом запросе.
 """
 from __future__ import annotations
 
@@ -62,29 +61,33 @@ def test_master_token_expires_after_a_month(tmp_path, monkeypatch):
         svc.verify_token(token)
 
 
-def test_administrator_token_still_lives_12_hours(tmp_path, monkeypatch):
+def test_administrator_token_lives_a_month_too(tmp_path, monkeypatch):
     svc = _service(tmp_path, users=[_record("703")])
     token = svc.issue_token("703")
-    _age(monkeypatch, 13 * HOUR)
+    _age(monkeypatch, 20 * DAY)
+    assert svc.verify_token(token)
+    _age(monkeypatch, 31 * DAY)
     with pytest.raises(ValueError, match="token_expired"):
         svc.verify_token(token)
 
 
-def test_master_with_panel_permissions_keeps_12_hours(tmp_path, monkeypatch):
-    """Роль с правами в панели — цена утечки токена уже другая."""
-    svc = _service(tmp_path, users=[_record("700", role_id="employee_checkin")])
-    resolved = svc.resolve_user("700")
-    assert resolved.is_master is True and resolved.permissions
-    assert svc.token_ttl_for(resolved) == acs.TOKEN_TTL_SECONDS
-    token = svc.issue_token("700")
-    _age(monkeypatch, 13 * HOUR)
-    with pytest.raises(ValueError, match="token_expired"):
+def test_same_ttl_for_everyone(tmp_path):
+    with_rights = _record("701", role_id="master")
+    with_rights["permissions"] = ["workshop", "payouts"]
+    svc = _service(tmp_path, users=[_record("700", role_id="master"), with_rights, _record("703")])
+    for uid in ("700", "701", "703"):
+        assert svc.token_ttl_for(svc.resolve_user(uid)) == acs.TOKEN_TTL_SECONDS == 30 * DAY
+
+
+def test_removed_user_token_stops_working_at_once(tmp_path):
+    """Длинный срок не мешает отсечь человека: токен проверяется по живому
+    списку пользователей при каждом запросе."""
+    svc = _service(tmp_path, users=[_record("703")])
+    token = svc.issue_token("703")
+    svc._data["users"] = []
+    svc._reload = lambda: None
+    with pytest.raises(ValueError, match="user_not_found"):
         svc.verify_token(token)
-
-
-def test_ttl_for_master_without_permissions(tmp_path):
-    svc = _service(tmp_path, users=[_record("700", role_id="master")])
-    assert svc.token_ttl_for(svc.resolve_user("700")) == acs.MASTER_TOKEN_TTL_SECONDS
 
 
 def test_login_options_list_only_masters_who_can_actually_log_in(tmp_path):
@@ -111,23 +114,3 @@ def test_login_names_are_short():
     assert acs.short_person_name("  ") == ""
 
 
-
-def test_senior_master_with_only_workshop_gets_long_token(tmp_path, monkeypatch):
-    """Старший мастер: право «Цех» — это раздел того же приложения мастера,
-    а не доступ к панели; с 12 часами он вводил пароль каждый день."""
-    record = _record("700", role_id="master")
-    record["permissions"] = ["workshop"]
-    svc = _service(tmp_path, users=[record])
-    resolved = svc.resolve_user("700")
-    assert resolved.permissions == ["workshop"]
-    assert svc.token_ttl_for(resolved) == acs.MASTER_TOKEN_TTL_SECONDS
-    token = svc.issue_token("700")
-    _age(monkeypatch, 20 * DAY)
-    assert svc.verify_token(token).employee_id == "700"
-
-
-def test_master_with_workshop_and_money_rights_keeps_12_hours(tmp_path):
-    record = _record("700", role_id="master")
-    record["permissions"] = ["workshop", "payouts"]
-    svc = _service(tmp_path, users=[record])
-    assert svc.token_ttl_for(svc.resolve_user("700")) == acs.TOKEN_TTL_SECONDS
