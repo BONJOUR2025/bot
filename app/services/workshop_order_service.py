@@ -18,6 +18,8 @@ from datetime import date, datetime
 from functools import lru_cache
 from typing import Any, Optional
 
+from app.services.order_payment import payment
+
 logger = logging.getLogger(__name__)
 
 WORKSHOP_SCLAD = 21021          # «3_Бестужевская ЦЕХ»
@@ -144,12 +146,12 @@ def card(order_id: int) -> dict[str, Any]:
         cur = con.cursor()
         cur.execute(
             "SELECT d.doc_num, d.doc_date, d.doc_time, dor.status_id, dor.date_out, dor.sclad_kredit_id, "
-            "       dor.current_sclad_id, dor.fast_execute, dor.ext_info, dor.defects, dor.kredit "
+            "       dor.current_sclad_id, dor.fast_execute, dor.ext_info, dor.defects, dor.kredit, dor.debet "
             "FROM docs_order dor JOIN docs d ON d.doc_id = dor.doc_id WHERE dor.id = ?", (order_id,))
         head = cur.fetchone()
         if not head:
             raise OrderNotFound("Заказ не найден.")
-        doc_num, doc_date, doc_time, status, date_out, sclad_kredit, cur_sclad, fast, ext, defects, kredit = head
+        doc_num, doc_date, doc_time, status, date_out, sclad_kredit, cur_sclad, fast, ext, defects, kredit, debet = head
 
         cur.execute(
             """
@@ -289,6 +291,7 @@ def card(order_id: int) -> dict[str, Any]:
         "note": _text(ext),
         "defects": _text(defects),
         "kredit": float(kredit or 0),
+        "payment": payment(kredit, debet),
         **deadline(due, now),
         "items": _with_splits([i for i in by_item.values() if i["services"] or i["photos"]]),
     }

@@ -730,7 +730,11 @@ def build_overview() -> dict[str, Any]:
         logger.warning("workshop: ученики не получены", exc_info=True)
         apprentices = None
 
-    return {
+    from app.services.order_payment import attach
+
+    # Плашка оплаты («Не оплачен / Предоплата / Оплачен») — каждому заказу
+    # во всех списках одним запросом.
+    return attach({
         "generated_at": now.isoformat(timespec="seconds"),
         "wip": wip,
         "queue": queue,
@@ -740,7 +744,7 @@ def build_overview() -> dict[str, Any]:
         "apprentices": apprentices,
         "advice": advice,
         "points": list(REPAIR_POINTS.values()),
-    }
+    })
 
 
 def get_overview(refresh: bool = False) -> dict[str, Any]:

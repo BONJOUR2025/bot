@@ -7794,6 +7794,12 @@ button:hover > .vac-desc { color: var(--color-text); }
 .ws-hint { margin: 0.25rem 0 0.6rem; color: var(--color-text-muted); font-size: 0.8rem; line-height: 1.4; }
 .ws-sub { margin-top: 0.3rem; color: var(--color-text-muted); font-size: 0.8rem; }
 .ws-sub b { color: var(--color-text); font-weight: 600; }
+/* Оплата заказа клиентом — метка в строке под услугой (PaymentBadge.jsx):
+   мельче и тише плашек срока, но цвет «не оплачен» читается сразу. */
+.pay-tag { display: inline-block; padding: 0 0.45rem; border-radius: 999px; font-size: 0.75rem; line-height: 1.45rem; white-space: nowrap; font-weight: 500; }
+.pay-tag--unpaid { color: var(--color-danger); background: color-mix(in srgb, var(--color-danger) 12%, transparent); }
+.pay-tag--prepaid { color: color-mix(in srgb, var(--color-warning) 70%, var(--color-text)); background: color-mix(in srgb, var(--color-warning, #d97706) 16%, transparent); }
+.pay-tag--paid { color: var(--color-text-muted); background: color-mix(in srgb, var(--color-text-muted) 10%, transparent); }
 .ws-more { margin-top: 0.5rem; padding: 0.5rem 0; border: 0; background: none; color: var(--color-primary); font: inherit; font-size: 0.85rem; cursor: pointer; }
 .ws-toolbar { display: flex; justify-content: flex-end; margin-bottom: 0.6rem; }
 .ws-chips { display: flex; gap: 0.35rem; overflow-x: auto; padding-bottom: 0.2rem; scrollbar-width: none; }

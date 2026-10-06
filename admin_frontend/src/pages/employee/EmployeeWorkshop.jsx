@@ -7,6 +7,7 @@ import { OrderSearch, OrderView } from './WorkshopOrder.jsx';
 import { Tabs } from '../../components/ui/SalaryUI.jsx';
 import { TopProgressBar } from '../../components/ui/ProgressBar.jsx';
 import useBackClose from '../../hooks/useBackClose.js';
+import PaymentBadge from './PaymentBadge.jsx';
 
 /** Цех — приложение старшего мастера (GET /api/workshop/overview).
  *
@@ -119,7 +120,12 @@ function Item({ it, extra, onOpenDoc, onPhoto }) {
         <span>{serviceTitle(it.name)}</span>
         <span>{money(it.kredit)}</span>
       </div>
-      {it.master && <div className="ws-sub">{it.master}{it.days > 0 ? ` · в работе ${it.days} дн` : ''}</div>}
+      {(it.master || it.payment) && (
+        <div className="ws-sub">
+          {it.master}{it.master && it.days > 0 ? ` · в работе ${it.days} дн` : ''}
+          {it.master && it.payment ? ' · ' : ''}<PaymentBadge p={it.payment} />
+        </div>
+      )}
     </>
   );
   return (
@@ -344,7 +350,9 @@ function ScansTab({ d, onOpenDoc }) {
                     {i.doc_num}
                     <ChevronRight size={16} className="ws-open-arrow" aria-hidden="true" />
                   </span>
-                  <span className="emp-wip-badges"><span className="badge badge--neutral">{dayShort(i.when)}</span></span>
+                  <span className="emp-wip-badges">
+                    <span className="badge badge--neutral">{dayShort(i.when)}</span>
+                  </span>
                 </div>
                 <div className="emp-payout-item__details">
                   <span>{serviceTitle(i.name)}</span>
@@ -352,7 +360,10 @@ function ScansTab({ d, onOpenDoc }) {
                 </div>
                 {/* Что именно не так, уже написано над списком — здесь только
                     мастер и цифры, которые у каждой записи свои. */}
-                <div className="ws-sub"><b>{i.master || 'мастер не указан'}</b>{i.detail && i.kind !== 'no_out' ? ` · ${i.detail}` : ''}</div>
+                <div className="ws-sub">
+                  <b>{i.master || 'мастер не указан'}</b>{i.detail && i.kind !== 'no_out' ? ` · ${i.detail}` : ''}
+                  {i.payment ? ' · ' : ''}<PaymentBadge p={i.payment} />
+                </div>
               </button>
             </div>
           )}
@@ -497,7 +508,10 @@ function AdviceTab({ d, onOpenDoc, onPhoto }) {
                   <span>{serviceTitle(q.main)}{q.services.length > 1 ? ` + ещё ${q.services.length - 1}` : ''}</span>
                   <span>{money(q.kredit)}</span>
                 </div>
-                <div className="ws-sub">{q.how}{q.waiting_days != null ? ` · ждёт ${q.waiting_days} дн` : ''}</div>
+                <div className="ws-sub">
+                  {q.how}{q.waiting_days != null ? ` · ждёт ${q.waiting_days} дн` : ''}
+                  {q.payment ? ' · ' : ''}<PaymentBadge p={q.payment} />
+                </div>
               </button>
               <Thumbs photos={q.photos} onPhoto={onPhoto} />
               {q.recommended ? (

@@ -7,6 +7,7 @@ import { money, serviceTitle, workshopPhotoPath } from './masterFormat.js';
 
 const pointPhotoPath = (p) => `/point/photos/${p.id}/full?md5=${encodeURIComponent(p.md5)}`;
 import useBackClose from '../../hooks/useBackClose.js';
+import PaymentBadge, { paymentText } from './PaymentBadge.jsx';
 
 /** Поиск заказа (номер или бирка) и карточка заказа для старшего мастера,
  *  плюс отметка входа или выхода за мастера — когда приложение мастера её
@@ -377,6 +378,7 @@ export function OrderView({ orderId, onBack, backLabel = 'Назад к цеху
               <span className="emp-wip-badges">
                 {o.urgent && <span className="badge badge--error">Срочный</span>}
                 <span className="badge badge--neutral">{o.status}</span>
+                <PaymentBadge p={o.payment} variant="badge" />
               </span>
             </div>
             <dl className="wo-facts">
@@ -384,6 +386,7 @@ export function OrderView({ orderId, onBack, backLabel = 'Назад к цеху
               <div><dt>Срок выдачи</dt><dd>{o.due ? <span className={`badge ${due}`}>{when(o.due)}</span> : '—'}</dd></div>
               <div><dt>Где сейчас</dt><dd>{o.location || '—'}</dd></div>
               <div><dt>Сумма услуг</dt><dd>{money(o.kredit)}</dd></div>
+              <div><dt>Оплата</dt><dd>{paymentText(o.payment)}</dd></div>
             </dl>
             {o.note && <p className="ws-sub">Примечание: {o.note}</p>}
             {o.defects && <p className="ws-sub">Дефекты: {o.defects}</p>}

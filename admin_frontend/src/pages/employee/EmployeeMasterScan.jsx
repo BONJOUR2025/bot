@@ -5,6 +5,7 @@ import { IN_MASTER_APP } from '../../utils/masterApp.js';
 import WebScanner, { canScanInBrowser, preloadWebScanner } from './WebScanner.jsx';
 import { money, serviceTitle } from './masterFormat.js';
 import useBackClose from '../../hooks/useBackClose.js';
+import PaymentBadge from './PaymentBadge.jsx';
 
 /** Вход и выход по бирке.
  *
@@ -337,6 +338,7 @@ export default function EmployeeMasterScan() {
             <div className="emp-scan-service__title">{serviceTitle(info.service.name)}</div>
             <div className="emp-scan-service__meta">
               Заказ {info.service.doc_num} · {money(info.service.kredit)}
+              {info.service.payment ? ' · ' : ''}<PaymentBadge p={info.service.payment} />
             </div>
           </div>
           <button
@@ -361,6 +363,7 @@ export default function EmployeeMasterScan() {
               <div className="emp-scan-service__title">{serviceTitle(info.service.name)}</div>
               <div className="emp-scan-service__meta">
                 Заказ {info.service.doc_num} · {money(info.service.kredit)}
+              {info.service.payment ? ' · ' : ''}<PaymentBadge p={info.service.payment} />
               </div>
               <div className="emp-scan-service__meta">
                 Статус: {info.service.status_name}

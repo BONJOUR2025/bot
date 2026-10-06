@@ -400,7 +400,9 @@ def _build_wip(master: Master) -> list[dict[str, Any]]:
             "comments": extra.get("comments") or [],
         })
     wip.sort(key=_wip_order)
-    return wip
+    from app.services.order_payment import attach
+
+    return attach(wip)
 
 
 # Порядок в «В работе»: сначала то, что уже горит, потом срочные, потом

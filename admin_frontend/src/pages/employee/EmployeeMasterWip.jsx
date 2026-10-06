@@ -3,6 +3,7 @@ import { MessageSquare, RefreshCw } from 'lucide-react';
 import api from '../../api.js';
 import { PhotoViewer } from '../../components/OrderPhotos.jsx';
 import { masterErrorText, money, serviceTitle } from './masterFormat.js';
+import PaymentBadge from './PaymentBadge.jsx';
 
 /** Что на мастере висит — принятые и не сданные услуги
  *  (GET /api/masters/me/wip → master_bot_service.get_wip).
@@ -211,6 +212,7 @@ export default function EmployeeMasterWip() {
                         <span>{serviceTitle(it.name)}</span>
                         <span>{money(it.kredit)}</span>
                       </div>
+                      {it.payment && <div className="ws-sub"><PaymentBadge p={it.payment} /></div>}
                     </div>
                   </div>
                   <div className="emp-wip-notes">

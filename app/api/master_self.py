@@ -230,6 +230,9 @@ def create_master_self_router() -> APIRouter:
             raise HTTPException(status_code=404, detail="Бирка не найдена в Агбисе. Проверьте номер под штрихкодом.")
         svc = result.get("service") or {}
         note(f"отсканировал бирку: заказ {svc.get('doc_num')}, {svc.get('name')}")
+        from app.services.order_payment import attach
+
+        attach(svc)  # плашка оплаты в карточке после скана
         return result
 
     @router.post("/scan/preview")
