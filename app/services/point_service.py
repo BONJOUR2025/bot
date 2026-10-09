@@ -432,7 +432,9 @@ def _read_week(code: str, days: int) -> list[dict[str, Any]]:
 
     from app.config import EXCEL_FILE
     from app.core.constants import MONTHS_RU
+    from app.utils.schedule_codes import code_key
 
+    key = code_key(code)
     dates = [_date.today() + timedelta(days=i) for i in range(days)]
     who: dict[str, str] = {}
     if os.path.exists(EXCEL_FILE):
@@ -461,7 +463,7 @@ def _read_week(code: str, days: int) -> list[dict[str, Any]]:
                         continue
                     c = col_of[d.day]
                     names = [str(r[0]).strip() for r in rows[2:]
-                             if r and r[0] and c < len(r) and str(r[c] or "").strip() == code]
+                             if r and r[0] and c < len(r) and code_key(r[c]) == key]
                     who[d.isoformat()] = ", ".join(names)
         finally:
             wb.close()

@@ -12,6 +12,7 @@ from ..config import EXCEL_FILE
 from ..core.constants import MONTHS_RU
 from ..data.salon_repository import get_salon_repository
 from ..schemas.schedule import SchedulePointOut
+from ..utils.schedule_codes import build_code_index, canonical_code
 
 _WEEKDAY_SHORT = ["пн", "вт", "ср", "чт", "пт", "сб", "вс"]
 
@@ -95,9 +96,10 @@ class ScheduleService:
                 for code, name in points.items()
             ]
 
+        index = build_code_index(points)
         assignments: Dict[str, str] = {}
         for row in range(3, sheet.max_row + 1):
-            code = str(sheet.cell(row=row, column=day_col).value or "").strip()
+            code = canonical_code(sheet.cell(row=row, column=day_col).value, index)
             if code not in points or code in assignments:
                 continue
             employee_cell = sheet.cell(row=row, column=1).value
@@ -160,6 +162,7 @@ class ScheduleService:
                     pass
 
         # Read employees (rows 3+, column 1) and their daily codes
+        index = build_code_index(points)
         employees: List[str] = []
         emp_schedules: Dict[str, Dict[int, str]] = {}
 
@@ -170,7 +173,7 @@ class ScheduleService:
                 continue
             sched: Dict[int, str] = {}
             for d, col in day_cols.items():
-                val = str(sheet.cell(row=row, column=col).value or "").strip()
+                val = canonical_code(sheet.cell(row=row, column=col).value, index)
                 if val:
                     sched[d] = val
             if sched:

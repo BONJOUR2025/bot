@@ -21,6 +21,7 @@ from app.data.location_repository import LocationRepository, get_location_reposi
 from app.data.salon_repository import SalonRepository, get_salon_repository
 from app.services.firebird_service import FirebirdService, get_firebird_service, run_with_timeout
 from app.config import EXCEL_FILE
+from app.utils.schedule_codes import build_code_index, canonical_code
 
 logger = logging.getLogger(__name__)
 
@@ -187,6 +188,20 @@ def _calc_base_salary(shifts_total: int, main_rate: float, extra_rate: float) ->
     return main_shifts * main_rate + extra_shifts * extra_rate
 
 
+def _known_point_codes() -> set[str]:
+    """Коды точек из обоих справочников: планов и салонов."""
+    codes: set[str] = set()
+    try:
+        codes.update(get_location_repository().codes_dict().keys())
+    except Exception as e:
+        logger.warning(f"Location codes unavailable: {e}")
+    try:
+        codes.update(s.code for s in get_salon_repository().list_salons() if s.code)
+    except Exception as e:
+        logger.warning(f"Salon codes unavailable: {e}")
+    return codes
+
+
 def _parse_schedule_from_excel(month: str, year: int) -> dict[str, dict[str, int]]:
     """Read schedule sheet from EXCEL_FILE.
 
@@ -238,6 +253,7 @@ def _parse_schedule_from_excel(month: str, year: int) -> dict[str, dict[str, int
     if not day_cols:
         return {}
 
+    index = build_code_index(_known_point_codes())
     result: dict[str, dict[str, int]] = {}
     for row in range(3, sheet.max_row + 1):
         raw_name = sheet.cell(row=row, column=1).value
@@ -246,7 +262,7 @@ def _parse_schedule_from_excel(month: str, year: int) -> dict[str, dict[str, int
             continue
         shifts: dict[str, int] = {}
         for d, col in day_cols.items():
-            val = str(sheet.cell(row=row, column=col).value or "").strip()
+            val = canonical_code(sheet.cell(row=row, column=col).value, index)
             if val:
                 shifts[val] = shifts.get(val, 0) + 1
         if shifts:
