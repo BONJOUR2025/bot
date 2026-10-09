@@ -40,6 +40,11 @@ from app.services.apk_info import read_apk_info, read_package_info
 from app.settings import settings
 
 
+# Окно восстановления телефонов после потери реестра 05.10.2026
+# (см. MdmService.adopt_unknown). После него незнакомый токен — снова просто 401.
+ADOPT_UNTIL = datetime(2026, 10, 11, 18, 0, tzinfo=timezone.utc)
+
+
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
@@ -450,6 +455,43 @@ class MdmService:
     def find_by_token(self, token: str) -> Optional[dict[str, Any]]:
         return self._repo.get_by_token(token)
 
+    def adopt_unknown(self, token: str, data: MdmCheckinRequest) -> Optional[dict[str, Any]]:
+        """Принять телефон с токеном, которого реестр не знает.
+
+        Только для восстановления после потери реестра 05.10.2026 и только до
+        ADOPT_UNTIL: в чек-ине нет device_id, а сам агент на 401 заново не
+        регистрируется, так что иначе телефоны вернуть можно лишь поездкой в
+        каждый салон. Карточка заводится под сам токен; политика помечается
+        неизвестной (policy_unknown) — пока оператор её не сохранит, телефону
+        не отдаём ни политику, ни команды, иначе агент запомнил бы пустую
+        политику и после перезагрузки снял бы киоск и запреты.
+        """
+        if datetime.now(timezone.utc) >= ADOPT_UNTIL:
+            return None
+        if len(token) != 43 or not all(c.isalnum() or c in "-_" for c in token):
+            return None
+        device_id = "restored-" + hashlib.sha256(token.encode()).hexdigest()[:12]
+        if self._repo.get(device_id):
+            return None
+        self._repo.upsert(
+            device_id,
+            {
+                "token": token,
+                "name": f"Восстановлен · {data.model or 'телефон'} — задайте политику",
+                "salon_id": None,
+                "enrolled_at": _now(),
+                "last_seen_at": _now(),
+                "policy": MdmPolicy().model_dump(),
+                # Версия как у телефона: первое сохранение в панели даст +1, и
+                # агент применит уже ту политику, что задал оператор.
+                "policy_version": int(data.applied_policy_version or 1),
+                "applied_policy_version": data.applied_policy_version,
+                "policy_unknown": True,
+                "commands": [],
+            },
+        )
+        return self._repo.get(device_id)
+
     # --- админка --------------------------------------------------------
 
     def list_devices(self) -> list[MdmDevice]:
@@ -483,6 +525,7 @@ class MdmService:
                 # изменилась, поэтому растёт при каждом сохранении, даже если
                 # содержимое совпало с предыдущим.
                 "policy_version": int(device.get("policy_version") or 1) + 1,
+                "policy_unknown": False,
             },
         )
         return self.get_device(device_id)

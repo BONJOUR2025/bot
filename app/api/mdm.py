@@ -195,8 +195,18 @@ def create_mdm_device_router(service: MdmService) -> APIRouter:
     @router.post("/checkin", response_model=MdmCheckinResponse)
     async def checkin_device(
         data: MdmCheckinRequest,
-        device: dict[str, Any] = Depends(_authenticated_device),
+        x_device_token: Optional[str] = Header(default=None, alias="X-Device-Token"),
     ) -> MdmCheckinResponse:
+        token = x_device_token or ""
+        device = service.find_by_token(token) or service.adopt_unknown(token, data)
+        if not device:
+            raise HTTPException(status_code=401, detail="invalid_device_token")
+        if device.get("policy_unknown"):
+            # Восстановленный телефон: телеметрию берём, чтобы он был виден в
+            # панели, но ответ — ошибка. Иначе агент сохранил бы пустую
+            # политику и применил её при следующей перезагрузке.
+            service.checkin(device, data)
+            raise HTTPException(status_code=409, detail="policy_unknown")
         updated = service.checkin(device, data)
         pending = service.take_pending_commands(updated.id)
         return MdmCheckinResponse(
@@ -220,6 +230,9 @@ def create_mdm_device_router(service: MdmService) -> APIRouter:
         команду мог положить и соседний процесс (bot-main исполняет расписания),
         поэтому внутрипроцессного события мало.
         """
+        if device.get("policy_unknown"):
+            # Ответ опроса тоже несёт политику — до её задания молчим.
+            raise HTTPException(status_code=409, detail="policy_unknown")
         device_id = str(device.get("id"))
         if data.acks:
             service.ack_commands(device, data.acks)
