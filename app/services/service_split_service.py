@@ -129,6 +129,15 @@ def _rebuild_summary(services: list[dict[str, Any]], old: list[dict[str, Any]]) 
             advances.update({k: _num(v) for k, v in _advances_since_last_salary_by_master(missing).items()})
         except Exception:
             logger.warning("Авансы для поделённых услуг не получены", exc_info=True)
+    # Процент с продаж ключей (masters_service._add_key_sales) к услугам не
+    # привязан — переносим его из исходной сводки как есть.
+    for o in old:
+        if o.get("keys_salary"):
+            r = rows.setdefault(o["master"], {"master": o["master"], "services_done": 0, "total_kredit": 0.0,
+                                              "total_salary": 0.0, "warnings_count": 0})
+            r["keys_revenue"] = o.get("keys_revenue")
+            r["keys_salary"] = o["keys_salary"]
+            r["total_salary"] += _num(o["keys_salary"])
     out = []
     for r in rows.values():
         r["total_kredit"] = round(r["total_kredit"], 2)

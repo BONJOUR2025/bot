@@ -427,6 +427,59 @@ def _advances_since_last_salary_by_master(master_names: list[str]) -> dict[str, 
     return out
 
 
+# Изготовление ключей пробивается в Агбисе не услугой, а продажей заготовки
+# (товары папки 210, строки заказа). Делает ключи один мастер, поэтому вся
+# продажа — его: 25 % от суммы идут ему в зарплату (решение владельца 09.10.2026).
+KEY_FOLDER_ID = 210
+KEY_MASTER = "Цыкунов А."
+KEY_RATE = 0.25
+
+
+def _key_sales_total(date_from: Optional[date], date_to: Optional[date]) -> float:
+    """Сумма продаж заготовок ключей по дате заказа."""
+    if not date_from or not date_to:
+        return 0.0
+    from .firebird_service import _connect
+
+    con = _connect()
+    try:
+        cur = con.cursor()
+        cur.execute(
+            "SELECT SUM(doc_order_lines.kredit) FROM doc_order_lines"
+            " INNER JOIN docs_order ON (docs_order.id = doc_order_lines.doc_order_id)"
+            " INNER JOIN docs ON (docs.doc_id = docs_order.doc_id)"
+            " INNER JOIN tovars_tbl ON (tovars_tbl.tovar_id = doc_order_lines.tovar_id)"
+            " WHERE tovars_tbl.folder_id = ? AND docs.doc_date >= ? AND docs.doc_date <= ?",
+            (KEY_FOLDER_ID, date_from, date_to),
+        )
+        row = cur.fetchone()
+        return float(row[0] or 0) if row else 0.0
+    finally:
+        try:
+            con.close()
+        except Exception:
+            pass
+
+
+def _add_key_sales(summary: list[dict], key_revenue: float) -> list[dict]:
+    """Начисляет KEY_MASTER процент с продаж ключей отдельными полями
+    keys_revenue/keys_salary и включает его в total_salary/to_pay."""
+    if key_revenue <= 0:
+        return summary
+    row = next((r for r in summary if r.get("master") == KEY_MASTER), None)
+    if row is None:
+        advances = _advances_since_last_salary_by_master([KEY_MASTER]).get(KEY_MASTER, 0.0)
+        row = {"master": KEY_MASTER, "services_done": 0, "total_kredit": 0.0, "total_salary": 0.0,
+               "warnings_count": 0, "advances_since_last_salary": round(advances, 2)}
+        summary = [*summary, row]
+    keys_salary = round(key_revenue * KEY_RATE, 2)
+    row["keys_revenue"] = round(key_revenue, 2)
+    row["keys_salary"] = keys_salary
+    row["total_salary"] = round(float(row.get("total_salary") or 0) + keys_salary, 2)
+    row["to_pay"] = round(row["total_salary"] - float(row.get("advances_since_last_salary") or 0), 2)
+    return sorted(summary, key=lambda r: r["total_salary"], reverse=True)
+
+
 def _build_salary_summary(service_df: pd.DataFrame) -> list[dict]:
     """Aggregate master salary by master name."""
     if service_df.empty:
@@ -723,6 +776,10 @@ def _fetch_works_uncached(
         return {"services": [], "salary_summary": []}
 
     salary_summary = _build_salary_summary(service_df)
+    try:
+        salary_summary = _add_key_sales(salary_summary, _key_sales_total(date_from, date_to))
+    except Exception:
+        logger.warning("Продажи ключей не получены — зарплата без них", exc_info=True)
 
     # Drop internal columns before serialising
     drop_cols = ["HAS_IN", "HAS_OUT", "status_id", "salary_rate", "has_warning"]

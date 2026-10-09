@@ -74,7 +74,7 @@ function SortIcon({ col, sortCol, sortDir }) {
     : <ChevronDown size={13} className="inline ml-1 text-[color:var(--color-primary)]" />;
 }
 
-function MastersSummaryTable({ rows, onMasterClick, advancesByMaster }) {
+function MastersSummaryTable({ rows, onMasterClick, advancesByMaster, keysByMaster }) {
   const { isMobile } = useViewport();
   const [tab, setTab] = useState('works');
 
@@ -115,13 +115,17 @@ function MastersSummaryTable({ rows, onMasterClick, advancesByMaster }) {
     // rows above at all -- they come from PayoutRepository, keyed by the
     // employee's bot account, not from anything in a Firebird service scan.
     // Backend-supplied per master, looked up here rather than recomputed.
+    // 25 % с продаж заготовок ключей — не услуга, в rows его нет; бэкенд
+    // считает его отдельно (keys_salary) и он добавляется к зарплате мастера.
     return Object.values(map)
       .map((m) => {
         const advance = advancesByMaster?.[m.master] ?? 0;
-        return { ...m, advances_since_last_salary: advance, to_pay: m.total_salary - advance };
+        const keys = keysByMaster?.[m.master] ?? 0;
+        const total = m.total_salary + keys;
+        return { ...m, keys_salary: keys, total_salary: total, advances_since_last_salary: advance, to_pay: total - advance };
       })
       .sort((a, b) => b.total_salary - a.total_salary);
-  }, [rows, advancesByMaster]);
+  }, [rows, advancesByMaster, keysByMaster]);
 
   const median = (arr) => {
     if (!arr.length) return null;
@@ -226,6 +230,7 @@ function MastersSummaryTable({ rows, onMasterClick, advancesByMaster }) {
                   <div className="flex justify-between"><span className="text-[color:var(--color-text-muted)]">Учтено в ЗП</span><span>{m.services_done}</span></div>
                   <div className="flex justify-between"><span className="text-[color:var(--color-text-muted)]">Сумма услуг</span><span className="text-[color:var(--color-muted-foreground)]">{fmtRub(m.total_kredit)}</span></div>
                   <div className="flex justify-between"><span className="text-[color:var(--color-text-muted)]">Зарплата</span><span className="font-semibold text-[color:var(--color-primary)]">{fmtRub(m.total_salary)}</span></div>
+                  {m.keys_salary > 0 && <div className="flex justify-between"><span className="text-[color:var(--color-text-muted)]" title="25 % с продаж заготовок ключей">в т.ч. ключи</span><span>{fmtRub(m.keys_salary)}</span></div>}
                   <div className="flex justify-between"><span className="text-[color:var(--color-text-muted)]" title="Авансы («Выплачено»/«Одобрено»), выданные после последней выплаты типа «Зарплата»">Аванс с посл. ЗП</span><span className="text-amber-600">{fmtRub(m.advances_since_last_salary)}</span></div>
                   <div className="flex justify-between"><span className="text-[color:var(--color-text-muted)]">К выплате</span><span className="font-semibold text-emerald-600">{fmtRub(m.to_pay)}</span></div>
                   <div className="flex justify-between"><span className="text-[color:var(--color-text-muted)]">Нарушений</span><span>{m.warnings_count > 0 ? <span className="inline-flex items-center gap-1 text-amber-600 font-medium"><AlertTriangle size={12} />{m.warnings_count}</span> : <span className="text-[color:var(--color-muted-foreground)]">—</span>}</span></div>
@@ -270,7 +275,7 @@ function MastersSummaryTable({ rows, onMasterClick, advancesByMaster }) {
                   </td>
                   <td className="px-4 py-2 text-right">{m.services_done}</td>
                   <td className="px-4 py-2 text-right text-[color:var(--color-muted-foreground)]">{fmtRub(m.total_kredit)}</td>
-                  <td className="px-4 py-2 text-right font-semibold text-[color:var(--color-primary)]">{fmtRub(m.total_salary)}</td>
+                  <td className="px-4 py-2 text-right font-semibold text-[color:var(--color-primary)]" title={m.keys_salary > 0 ? `в т.ч. ключи ${fmtRub(m.keys_salary)}` : undefined}>{fmtRub(m.total_salary)}</td>
                   <td className="px-4 py-2 text-right text-amber-600">{fmtRub(m.advances_since_last_salary)}</td>
                   <td className="px-4 py-2 text-right font-semibold text-emerald-600">{fmtRub(m.to_pay)}</td>
                   <td className="px-4 py-2 text-right">
@@ -611,6 +616,12 @@ export default function Masters() {
     ),
     [salarySummary],
   );
+  const keysByMaster = useMemo(
+    () => Object.fromEntries(
+      salarySummary.filter((s) => s.keys_salary).map((s) => [s.master, s.keys_salary]),
+    ),
+    [salarySummary],
+  );
   const [loading, setLoading]             = useState(false);
   const [loadProgress, setLoadProgress]   = useState(null);
   const [error, setError]                 = useState(null);
@@ -719,6 +730,7 @@ export default function Masters() {
         // master -- collecting across ranges (last one wins) recovers it
         // for a multi-month view instead of discarding it.
         const advancesByMaster = {};
+        const keysSum = {};
         for (let i = 0; i < ranges.length; i++) {
           const [f, t] = ranges[i];
           setLoadProgress({ done: i, total: ranges.length, label: f.slice(0, 7) });
@@ -729,6 +741,7 @@ export default function Masters() {
               if (s.advances_since_last_salary != null) {
                 advancesByMaster[s.master] = s.advances_since_last_salary;
               }
+              if (s.keys_salary) keysSum[s.master] = (keysSum[s.master] || 0) + s.keys_salary;
             }
             if (isStale) setStale((prev) => Math.max(prev || 0, staleAgeSec));
           } catch (e) {
@@ -742,8 +755,8 @@ export default function Masters() {
         // recomputes those correctly from allServices -- only the advances
         // figure is range-independent, so that's the only part carried over.
         setSalarySummary(
-          Object.entries(advancesByMaster).map(([master, advances_since_last_salary]) => (
-            { master, advances_since_last_salary }
+          [...new Set([...Object.keys(advancesByMaster), ...Object.keys(keysSum)])].map((master) => (
+            { master, advances_since_last_salary: advancesByMaster[master], keys_salary: keysSum[master] }
           )),
         );
       }
@@ -1291,7 +1304,7 @@ export default function Masters() {
                   )}
                 </div>
               )}
-              <MastersSummaryTable rows={filtered} onMasterClick={(name) => toggleMaster(name)} advancesByMaster={advancesByMaster} />
+              <MastersSummaryTable rows={filtered} onMasterClick={(name) => toggleMaster(name)} advancesByMaster={advancesByMaster} keysByMaster={keysByMaster} />
             </div>
           )}
 
