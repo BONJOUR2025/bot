@@ -74,6 +74,13 @@ function SortIcon({ col, sortCol, sortDir }) {
     : <ChevronDown size={13} className="inline ml-1 text-[color:var(--color-primary)]" />;
 }
 
+// Совпадает с _HIGH_RATE_CATEGORIES в app/services/masters_service.py.
+const CLEANING_CATEGORIES = new Set([
+  '02. Химчистка обуви',
+  '03. Химчистка сумок,одежды,акссесуаров',
+  '06. Реставрация, выведение пятен, чистка',
+]);
+
 function MastersSummaryTable({ rows, onMasterClick, advancesByMaster, keysByMaster }) {
   const { isMobile } = useViewport();
   const [tab, setTab] = useState('works');
@@ -622,6 +629,12 @@ export default function Masters() {
     ),
     [salarySummary],
   );
+  const keysRevenueByMaster = useMemo(
+    () => Object.fromEntries(
+      salarySummary.filter((s) => s.keys_revenue).map((s) => [s.master, s.keys_revenue]),
+    ),
+    [salarySummary],
+  );
   const [loading, setLoading]             = useState(false);
   const [loadProgress, setLoadProgress]   = useState(null);
   const [error, setError]                 = useState(null);
@@ -731,6 +744,7 @@ export default function Masters() {
         // for a multi-month view instead of discarding it.
         const advancesByMaster = {};
         const keysSum = {};
+        const keysRev = {};
         for (let i = 0; i < ranges.length; i++) {
           const [f, t] = ranges[i];
           setLoadProgress({ done: i, total: ranges.length, label: f.slice(0, 7) });
@@ -742,6 +756,7 @@ export default function Masters() {
                 advancesByMaster[s.master] = s.advances_since_last_salary;
               }
               if (s.keys_salary) keysSum[s.master] = (keysSum[s.master] || 0) + s.keys_salary;
+              if (s.keys_revenue) keysRev[s.master] = (keysRev[s.master] || 0) + s.keys_revenue;
             }
             if (isStale) setStale((prev) => Math.max(prev || 0, staleAgeSec));
           } catch (e) {
@@ -756,7 +771,7 @@ export default function Masters() {
         // figure is range-independent, so that's the only part carried over.
         setSalarySummary(
           [...new Set([...Object.keys(advancesByMaster), ...Object.keys(keysSum)])].map((master) => (
-            { master, advances_since_last_salary: advancesByMaster[master], keys_salary: keysSum[master] }
+            { master, advances_since_last_salary: advancesByMaster[master], keys_salary: keysSum[master], keys_revenue: keysRev[master] }
           )),
         );
       }
@@ -828,11 +843,28 @@ export default function Masters() {
     });
     const orders = Object.values(orderMap);
     let totalKredit = 0, totalSalary = 0;
+    // Ремонт и химчистка — по категории услуги (химчистка идёт по 23 %,
+    // см. _HIGH_RATE_CATEGORIES в masters_service); ключи — продажи
+    // заготовок, их в услугах нет, берутся из сводки по мастерам.
+    const repair = { kredit: 0, salary: 0, count: 0 };
+    const cleaning = { kredit: 0, salary: 0, count: 0 };
+    const salaryMasters = new Set();
     filtered.forEach((r) => {
       if (r.master_salary == null) return;
-      totalKredit += Number(r.kredit) || 0;
-      totalSalary += Number(r.master_salary) || 0;
+      const k = Number(r.kredit) || 0;
+      const sal = Number(r.master_salary) || 0;
+      totalKredit += k;
+      totalSalary += sal;
+      const g = CLEANING_CATEGORIES.has(r.top_parent_name) ? cleaning : repair;
+      g.kredit += k; g.salary += sal; g.count++;
+      salaryParts(r).forEach((p) => salaryMasters.add(p.master));
     });
+    const keys = { kredit: 0, salary: 0 };
+    salaryMasters.forEach((m) => {
+      keys.salary += keysByMaster[m] || 0;
+      keys.kredit += keysRevenueByMaster[m] || 0;
+    });
+    totalSalary += keys.salary;
     return {
       total:        filtered.length,
       done:         filtered.filter((x) => x.status === 'Выполнено').length,
@@ -844,8 +876,11 @@ export default function Masters() {
       ordersInWork: orders.filter((s) => s.some((v) => v === 'В работе')).length,
       totalKredit,
       totalSalary,
+      repair,
+      cleaning,
+      keys,
     };
-  }, [filtered]);
+  }, [filtered, keysByMaster, keysRevenueByMaster]);
 
   const topMastersChart = useMemo(() => {
     const map = {};
@@ -1210,14 +1245,39 @@ export default function Masters() {
                 {kpi.done} услуг учтено в ЗП за период
               </div>
             </div>
-            <div className="px-5 sm:px-6 py-4 border-t border-[color:var(--color-border)] flex flex-wrap items-center gap-x-4 gap-y-3">
-              <Term label="Услуг всего" value={kpi.total} fmt={(v) => String(v)} />
-              <Term op="·" label="Учтено в ЗП" value={kpi.done} fmt={(v) => String(v)} />
-              <Term op="·" label="Сумма услуг" value={kpi.totalKredit} />
-              {/* Итог формулы не повторяет заголовок цветом и жиром: та же
-                  сумма уже стоит крупно строкой выше, и второй фиолетовый
-                  экземпляр делал из вывода второй заголовок. */}
-              <Term op="=" label="Зарплата" value={kpi.totalSalary} strong />
+            {/* Из чего сложилась зарплата: выручка → начислено по каждому
+                направлению, итог — та же сумма, что крупно выше. */}
+            <div className="px-5 sm:px-6 py-4 border-t border-[color:var(--color-border)]">
+              <table className="w-full text-sm tabular-nums">
+                <thead>
+                  <tr className="text-xs uppercase tracking-wide text-[color:var(--color-muted-foreground)]">
+                    <th className="text-left font-normal pb-2"></th>
+                    <th className="text-right font-normal pb-2">Выручка</th>
+                    <th className="text-right font-normal pb-2">%</th>
+                    <th className="text-right font-normal pb-2">Зарплата</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {[
+                    ['Ремонт', kpi.repair, `${kpi.repair.count} усл.`],
+                    ['Химчистка', kpi.cleaning, `${kpi.cleaning.count} усл.`],
+                    ['Ключи', kpi.keys, 'продажи'],
+                  ].map(([label, g, note]) => (
+                    <tr key={label} className="border-t border-[color:var(--color-border)]">
+                      <td className="py-2">{label} <span className="text-xs text-[color:var(--color-muted-foreground)]">{note}</span></td>
+                      <td className="py-2 text-right">{fmtRub(g.kredit)}</td>
+                      <td className="py-2 text-right text-[color:var(--color-muted-foreground)]">{g.kredit ? `${Math.round(g.salary / g.kredit * 100)}%` : '—'}</td>
+                      <td className="py-2 text-right">{fmtRub(g.salary)}</td>
+                    </tr>
+                  ))}
+                  <tr className="border-t-2 border-[color:var(--color-border)] font-semibold">
+                    <td className="py-2">Итого</td>
+                    <td className="py-2 text-right">{fmtRub(kpi.totalKredit + kpi.keys.kredit)}</td>
+                    <td></td>
+                    <td className="py-2 text-right">{fmtRub(kpi.totalSalary)}</td>
+                  </tr>
+                </tbody>
+              </table>
             </div>
           </section>
 
