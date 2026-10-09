@@ -436,7 +436,8 @@ KEY_RATE = 0.25
 
 
 def _key_sales_total(date_from: Optional[date], date_to: Optional[date]) -> float:
-    """Сумма продаж заготовок ключей по дате заказа."""
+    """Сумма продаж заготовок ключей по дате заказа — только заказы в
+    статусе «Выданный» (STATUS_ID=5), решение владельца 09.10.2026."""
     if not date_from or not date_to:
         return 0.0
     from .firebird_service import _connect
@@ -449,7 +450,8 @@ def _key_sales_total(date_from: Optional[date], date_to: Optional[date]) -> floa
             " INNER JOIN docs_order ON (docs_order.id = doc_order_lines.doc_order_id)"
             " INNER JOIN docs ON (docs.doc_id = docs_order.doc_id)"
             " INNER JOIN tovars_tbl ON (tovars_tbl.tovar_id = doc_order_lines.tovar_id)"
-            " WHERE tovars_tbl.folder_id = ? AND docs.doc_date >= ? AND docs.doc_date <= ?",
+            " WHERE tovars_tbl.folder_id = ? AND docs_order.status_id = 5"
+            " AND docs.doc_date >= ? AND docs.doc_date <= ?",
             (KEY_FOLDER_ID, date_from, date_to),
         )
         row = cur.fetchone()
