@@ -6,9 +6,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 HR/payroll system for the BONJOUR business: a Telegram bot for employees/admins plus a FastAPI HTTP API with a React admin panel. Manages employees, advance payout requests, salaries, vacations, shift check-ins, recruitment (AI-assisted interviews via the Anthropic API), and more. The UI, code comments, and commit messages are predominantly in Russian — follow that convention.
 
-The repo also hosts a second, mostly-independent subsystem bolted onto the same admin panel/API: 3D shoe-last fit matching (see [Shoe-last fitting subsystem](#shoe-last-fitting-3d-scan-subsystem) below). Most recent commit activity on `claude/init-wmebv3` is in this subsystem, not HR/payroll.
+The repo also hosts a second, mostly-independent subsystem bolted onto the same admin panel/API: 3D shoe-last fit matching (see [Shoe-last fitting subsystem](#shoe-last-fitting-3d-scan-subsystem) below).
 
-Note: the repo root contains live production data (`user.json`, `advance_requests.json`, `hr.db`, `ФОТ админы *.xlsx`, salary report PNGs). Do not edit these data files unless the task is explicitly about the data.
+Note: `user.json`, `advance_requests.json`, `hr.db` etc. in the repo root are stale copies, not live data. Production data lives in `C:/Users/User/Desktop/telegram_bot` (see the outer `C:/deploy/CLAUDE.md`) — read it there when you need current numbers. Don't edit either copy unless the task is about the data.
 
 ## Commands
 
@@ -48,7 +48,7 @@ There is no pytest.ini/pyproject — run from the repo root. `tests/conftest.py`
 
 ```bash
 cd admin_frontend
-npm install
+npm ci           # lockfile is authoritative; deploy uses npm ci too
 npm run dev      # Vite dev server
 npm run build    # outputs dist/, which FastAPI serves at /admin
 npm run lint     # eslint
@@ -64,13 +64,13 @@ The frontend calls the API via axios with `baseURL: '/api'` and a Bearer token f
 
 ### Three processes, shared state
 
-The system runs as three separate long-lived processes that share the same data files and SQLite DB:
+In production pm2 runs `bot-main`, `bot-vk`, `bot-app`, `xtunnel` (public tunnel for app.bonjour.pw) and `xtunnel-healthcheck` — see the outer `C:/deploy/CLAUDE.md`. The app itself is three long-lived processes that share the same data files and SQLite DB:
 
 1. **Bot process** (`python -m app.main`) — Telegram polling. This is the ONLY process that registers scheduled jobs (morning briefing, reminders); it also runs `init_db()` on startup.
 2. **API process** (`uvicorn app.server:app`) — FastAPI app built by `app/api/create_app()`. It builds the Telegram Application with `create_application(with_jobs=False)` — registering jobs here too would double every scheduled message.
 3. **VK bot process** (`python -m app.vk_main`) — a `vkbottle`-based port of the employee-facing Telegram scenarios only (see Commands above). Uses VK's Bot Long Poll API, no public webhook needed.
 
-SQLite (`hr.db`) runs in WAL mode with a busy timeout (`app/db/session.py`) specifically so both processes can read/write concurrently. `launcher.py` is a Tkinter GUI (built into a Windows EXE) that starts/stops both processes; production runs on Windows behind ngrok.
+SQLite (`hr.db`) runs in WAL mode with a busy timeout (`app/db/session.py`) specifically so both processes can read/write concurrently. `launcher.py` (Tkinter GUI) is legacy; production is pm2 + xtunnel, not ngrok.
 
 ### Layering
 
@@ -88,7 +88,7 @@ app/core/      Telegram Application factory (application.py) and ConversationHan
 
 ### Hybrid storage
 
-Older entities (employees, payouts, vacations, adjustments, incentives, messages) live in JSON files in the repo root, accessed through repositories built on `app/data/json_storage.py`. Newer entities (recruitment, assets, tasks, payment calendar, ...) are SQLAlchemy models in `hr.db`. `app/db/session.py:init_db()` does `create_all` plus hand-rolled column migrations — there is no Alembic. External data sources: Firebird DB (sales figures for salary calc), amoCRM (manager salary), Avito/HeadHunter APIs (recruitment), Anthropic API (`app/services/llm_client.py`, AI interviews and text checks), Web Push (custom `admin_frontend/public/sw.js` — do not add VitePWA, it conflicts).
+Older entities (employees, payouts, vacations, adjustments, incentives, messages) live in JSON files in the repo root, accessed through repositories built on `app/data/json_storage.py`. Newer entities (recruitment, assets, tasks, payment calendar, ...) are SQLAlchemy models in `hr.db`. `app/db/session.py:init_db()` does `create_all` plus hand-rolled column migrations — there is no Alembic. External data sources: Firebird DB (sales figures for salary calc), amoCRM (manager salary), Avito/HeadHunter APIs (recruitment), LLM via `app/services/llm_client.py` (provider from `config.json` `llm_provider`: `anthropic` or `polza`; production uses Polza), Web Push (custom `admin_frontend/public/sw.js` — do not add VitePWA, it conflicts).
 
 ### Configuration
 
@@ -123,21 +123,19 @@ Separate feature, same repo/API/admin panel: given a 3D scan of a customer's foo
 - Related research artifacts (`.scm` format reverse-engineering, sample point clouds, measurement dumps) live in the **outer** `C:\deploy` directory, not in this repo — see that directory's `CLAUDE.md`.
 - Tests: `tests/test_{fit_clearance,fit_pipeline,fit_size_match,last_bottom_profile,last_fit_hybrid_service,last_fit_regression,last_pose_measurements,last_pose_service,last_registration_service,last_working_orientation,mesh3d_service,mesh_visualization_service,stl_parser_service}.py`.
 
-## Skill routing
+### Agbis (Firebird) — sales and orders
 
-When the user's request matches an available skill, invoke it via the Skill tool. When in doubt, invoke the skill.
+Agbis is the dry-cleaning/repair POS; its Firebird DB is the source for sales, orders and master salaries. Access goes through `app/services/firebird_service.py` (`_connect()`, cached via `fdb_cache.py`); master pay is in `masters_service.py`. Facts that are slow to rediscover:
 
-Key routing rules:
-- Product ideas/brainstorming → invoke /office-hours
-- Strategy/scope → invoke /plan-ceo-review
-- Architecture → invoke /plan-eng-review
-- Design system/plan review → invoke /design-consultation or /plan-design-review
-- Full review pipeline → invoke /autoplan
-- Bugs/errors → invoke /investigate
-- QA/testing site behavior → invoke /qa or /qa-only
-- Code review/diff check → invoke /review
-- Visual polish → invoke /design-review
-- Ship/deploy/PR → invoke /ship or /land-and-deploy
-- Save progress → invoke /context-save
-- Resume context → invoke /context-restore
-- Author a backlog-ready spec/issue → invoke /spec
+- Orders: `docs` (date `doc_date`) ↔ `docs_order` (`status_id`: 4 = исполнен, 5 = выдан) ↔ `docs_order_history` (status changes). Goods sold within an order are `doc_order_lines` joined to `tovars_tbl`.
+- Key cutting is sold as **goods**, not a service: `tovars_tbl.folder_id = 210`. It is paid to one master (`KEY_MASTER` in `masters_service.py`) at 25%, only for issued orders.
+- Rates: dry-cleaning categories 23% (`_HIGH_RATE_CATEGORIES`), everything else 20%. The frontend `Masters.jsx` recomputes the summary from services, so rate/category changes go in both places.
+- The Windows console mangles Cyrillic (cp1251) — write diagnostic output to a UTF-8 file instead of printing.
+
+### `device/` — on-device clients
+
+Each has its own README: `mdm_agent/` (Device Owner agent for salon phones; signing key lives outside the repo in `C:/deploy/mdm-keystore`, never regenerate it), `master_app/` (Android app for masters' own phones), `salon_app/` (Android shell for salon admins' phones), `pc_agent/` (salon PC health agent), `visitor_counter/` (ESP8266 counter + relay).
+
+## Skills
+
+Use a skill when the request clearly matches it (e.g. `/investigate` for a hard bug, `/qa` for testing the live site). Don't route small fixes or questions through heavy workflows. Don't use `/ship` or `/land-and-deploy`: this repo ships by direct push to `claude/init-wmebv3` plus `bash /c/deploy/deploy.sh` (see the outer `C:/deploy/CLAUDE.md`).
